@@ -1,26 +1,162 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* Surface tokens */
+  --color-background: #0A0A0A;
+  --color-surface: #0A0A0A;
+  --color-surface-dim: #131313;
+  --color-surface-bright: #3a3939;
+  --color-surface-variant: #353534;
+  --color-surface-container: #201f1f;
+  --color-surface-container-low: #1c1b1b;
+  --color-surface-container-lowest: #0e0e0e;
+  --color-surface-container-high: #2a2a2a;
+  --color-surface-container-highest: #353534;
+  --color-surface-tint: #adc6ff;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* On-surface tokens */
+  --color-on-surface: #e5e2e1;
+  --color-on-surface-variant: #c6c6c6;
+  --color-on-background: #e5e2e1;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Primary tokens */
+  --color-primary: #ffffff;
+  --color-primary-fixed: #005ac2;
+  --color-primary-fixed-dim: #004395;
+  --color-primary-container: #c3d4ff;
+  --color-on-primary: #001a42;
+  --color-on-primary-fixed: #ffffff;
+  --color-on-primary-fixed-variant: #d8e2ff;
+  --color-on-primary-container: #000000;
+  --color-inverse-primary: #005ac2;
+
+  /* Secondary tokens */
+  --color-secondary: #ddb7ff;
+  --color-secondary-fixed: #ddb7ff;
+  --color-secondary-fixed-dim: #ca93ff;
+  --color-secondary-container: #6900b3;
+  --color-on-secondary: #2c0051;
+  --color-on-secondary-fixed: #2c0051;
+  --color-on-secondary-fixed-variant: #590099;
+  --color-on-secondary-container: #f0dbff;
+
+  /* Tertiary tokens */
+  --color-tertiary: #e5e2e1;
+  --color-tertiary-fixed: #5f5e5e;
+  --color-tertiary-fixed-dim: #474646;
+  --color-tertiary-container: #929090;
+  --color-on-tertiary: #1c1b1b;
+  --color-on-tertiary-fixed: #ffffff;
+  --color-on-tertiary-fixed-variant: #e5e2e1;
+  --color-on-tertiary-container: #000000;
+
+  /* Error tokens */
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+  --color-on-error: #690005;
+  --color-on-error-container: #ffdad6;
+
+  /* Outline tokens */
+  --color-outline: #919191;
+  --color-outline-variant: #474747;
+
+  /* Inverse tokens */
+  --color-inverse-surface: #e5e2e1;
+  --color-inverse-on-surface: #313030;
+
+  /* Border radius overrides */
+  --radius: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #0A0A0A;
+  color: #e5e2e1;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+.hero-gradient {
+  background: radial-gradient(circle at center, rgba(0, 90, 194, 0.15) 0%, transparent 70%);
+}
+
+.cta-card-border {
+  position: relative;
+}
+
+.cta-card-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: 0.5rem;
+  background: linear-gradient(to right, #005ac2, #ddb7ff);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.bg-mesh {
+  background-image: radial-gradient(circle at 2px 2px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+.glow-sphere {
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.12) 0%, rgba(59, 130, 246, 0) 70%);
+}
+
+.auth-card {
+  background-color: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Hero float ─────────────────────────────────────── */
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+
+.hero-float {
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+.hero-float:hover {
+  animation-play-state: paused;
+}
+
+/* ── Scroll reveal ──────────────────────────────────── */
+.reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.reveal.reveal-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Auth card entrance ─────────────────────────────── */
+@keyframes auth-card-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.auth-card-enter {
+  animation: auth-card-in 0.4s ease-out forwards;
+}
+
+/* ── CTA border radius fix ──────────────────────────── */
+.cta-card-border::before {
+  border-radius: 1rem;
 }
