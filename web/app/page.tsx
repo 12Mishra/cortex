@@ -1,9 +1,13 @@
 "use client";
 import Image from "next/image";
-import WorkflowVisual from "../components/WorkflowVisual";
+import dynamic from "next/dynamic";
+const WorkflowVisual = dynamic(() => import("../components/WorkflowVisual"), {
+  ssr: false,
+});
 import ScrollReveal from "../components/ScrollReveal";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
+import { LogOut } from "lucide-react";
 
 export default function Home() {
   const router = useRouter();
@@ -31,14 +35,7 @@ export default function Home() {
               Cortex
             </button>
           </div>
-          {!session ? (
-            <a
-              href="/auth"
-              className="bg-primary-fixed text-white px-5 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-all duration-200"
-            >
-              Get Started
-            </a>
-          ) : (
+          {session ? (
             <div className="flex items-center gap-3">
               {session.user?.image && (
                 <Image
@@ -49,13 +46,17 @@ export default function Home() {
                   className="rounded-full border border-white/10"
                 />
               )}
-              <a
-                href="/dashboard"
-                className="bg-primary-fixed text-white px-5 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-all duration-200"
-              >
-                Dashboard
-              </a>
+              <button onClick={() => signOut()}>
+                <LogOut />
+              </button>
             </div>
+          ) : (
+            <a
+              href="/auth"
+              className="bg-primary-fixed text-white px-5 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-all duration-200"
+            >
+              Sign In
+            </a>
           )}
         </div>
       </nav>
@@ -85,18 +86,27 @@ export default function Home() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-              <a
-                href="/auth"
-                className="w-full sm:w-auto px-8 py-4 bg-primary-fixed text-white rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2"
-              >
-                Get Started Free
-                <span
-                  className="material-symbols-outlined text-base"
-                  style={{ fontVariationSettings: "'FILL' 0" }}
+              {session ? (
+                <a
+                  href="/dashboard"
+                  className="w-full sm:w-auto px-8 py-4 bg-primary-fixed text-white rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2"
                 >
-                  arrow_forward
-                </span>
-              </a>
+                  Dashboard{" "}
+                </a>
+              ) : (
+                <a
+                  href="/auth"
+                  className="w-full sm:w-auto px-8 py-4 bg-primary-fixed text-white rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2"
+                >
+                  Get Started Free
+                  <span
+                    className="material-symbols-outlined text-base"
+                    style={{ fontVariationSettings: "'FILL' 0" }}
+                  >
+                    arrow_forward
+                  </span>
+                </a>
+              )}
               <a
                 href="#workflow-section"
                 className="w-full sm:w-auto px-8 py-4 bg-white/5 text-white rounded-xl font-bold hover:bg-white/10 transition-all border border-white/10 flex items-center justify-center gap-2"
@@ -311,9 +321,8 @@ export default function Home() {
             </ScrollReveal>
           </div>
         </section>
-
       </main>
-      
+
       <footer className="bg-[#0A0A0A] w-full py-20 px-8 border-t border-white/5">
         <div className="flex flex-col md:flex-row justify-between items-center max-w-360 mx-auto gap-8">
           <div className="text-center md:text-left">
