@@ -1,0 +1,30 @@
+{
+  "name": "doc-mind-pro",
+  "version": "1.0.0",
+  "description": "Doc-Mind Pro is an AI-powered document assistant that helps you manage, analyze, and extract insights from your documents with ease.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/12Mishra/doc-mind-pro.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/12Mishra/doc-mind-pro/issues"
+  },
+  "homepage": "https://github.com/12Mishra/doc-mind-pro#readme",
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.6.0",
+    "@prisma/client": "^7.6.0",
+    "pg": "^8.20.0",
+    "pgvector": "^0.2.1",
+    "prisma": "^7.6.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.20.0"
+  }
+}
