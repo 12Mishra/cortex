@@ -67,6 +67,7 @@ interface FileEntry {
   state: FileUploadState;
   progress: number; // 0-100
   error?: string;
+  documentId?: string; // set after confirm step succeeds
 }
 
 function UploadModal({
@@ -184,8 +185,9 @@ function UploadModal({
             }),
           });
           if (!confirmRes.ok) throw new Error("Failed to save document");
+          const { document } = await confirmRes.json();
 
-          setEntryState(i, { state: "done", progress: 100 });
+          setEntryState(i, { state: "done", progress: 100, documentId: document.id });
         } catch (err) {
           setEntryState(i, {
             state: "error",
@@ -197,6 +199,33 @@ function UploadModal({
 
     setUploadDone(true);
     onUploaded?.();
+  };
+
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleStartProcessing = async () => {
+    const docIds = entries
+      .filter((e) => e.state === "done" && e.documentId)
+      .map((e) => e.documentId!);
+
+    if (docIds.length === 0) return;
+
+    setIsProcessing(true);
+    try {
+      await Promise.all(
+        docIds.map((id) =>
+          fetch("http://localhost:3001/file/process", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileId: id }),
+          }),
+        ),
+      );
+    } finally {
+      setIsProcessing(false);
+      onUploaded?.();
+      onClose();
+    }
   };
 
   const isUploading = entries.some((e) => e.state === "uploading");
@@ -438,11 +467,16 @@ function UploadModal({
             Cancel
           </button>
           <button
-            onClick={uploadDone ? onClose : handleUpload}
-            disabled={isUploading || (!uploadDone && !hasIdle)}
+            onClick={uploadDone ? handleStartProcessing : handleUpload}
+            disabled={isUploading || isProcessing || (!uploadDone && !hasIdle)}
             className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-primary-fixed hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
           >
-            {isUploading ? (
+            {isProcessing ? (
+              <>
+                <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                Starting…
+              </>
+            ) : isUploading ? (
               <>
                 <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                 Uploading…
