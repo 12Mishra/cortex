@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import SessionProvider from "@/providers/SessionProvider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,7 +28,7 @@ export default function RootLayout({
         />
       </head>
       <body className="selection:bg-primary-fixed/30 selection:text-white">
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

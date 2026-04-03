@@ -71,7 +71,7 @@ export default function HeroVisual() {
           />
 
           {/* Gradient overlay bottom */}
-          <div className="absolute inset-0 bg-gradient-to-t from-surface-container-lowest via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-linear-to-t from-surface-container-lowest via-transparent to-transparent" />
 
           {/* Dynamic specular highlight that moves with mouse */}
           <div
@@ -83,7 +83,7 @@ export default function HeroVisual() {
           />
 
           {/* Top edge shine */}
-          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+          <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
         </div>
 
         {/* Floating shadow beneath */}
