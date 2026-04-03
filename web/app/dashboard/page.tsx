@@ -18,7 +18,7 @@ interface Doc {
   processedAt: string | null;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, step }: { status: string; step?: string }) {
   if (status === "ready") {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
@@ -29,9 +29,9 @@ function StatusBadge({ status }: { status: string }) {
   }
   if (status === "processing") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-fixed/10 border border-primary-fixed/20 text-primary-fixed text-xs font-medium">
-        <span className="w-1.5 h-1.5 rounded-full bg-primary-fixed animate-pulse" />
-        Processing
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary-fixed/10 border border-primary-fixed/20 text-primary-fixed text-xs font-medium max-w-50">
+        <span className="w-1.5 h-1.5 rounded-full bg-primary-fixed animate-pulse shrink-0" />
+        <span className="truncate">{step ?? "Processing…"}</span>
       </span>
     );
   }
@@ -527,6 +527,8 @@ export default function DashboardPage() {
   >("dashboard");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
+  // Maps docId → live step message from SSE
+  const [processingSteps, setProcessingSteps] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -550,6 +552,50 @@ export default function DashboardPage() {
   useEffect(() => {
     if (status === "authenticated") fetchDocs();
   }, [status, fetchDocs]);
+
+  // Open an EventSource for every doc in "processing" state
+  useEffect(() => {
+    const processingDocs = docs.filter((d) => d.status === "processing");
+    if (processingDocs.length === 0) return;
+
+    const sources = processingDocs.map((doc) => {
+      const es = new EventSource(`http://localhost:3001/file/status/${doc.id}`);
+
+      es.onmessage = (e) => {
+        const event = JSON.parse(e.data) as {
+          step: string;
+          progress: number;
+          message: string;
+          done?: boolean;
+          error?: boolean;
+        };
+
+        setProcessingSteps((prev) => ({ ...prev, [doc.id]: event.message }));
+
+        if (event.done) {
+          setDocs((prev) =>
+            prev.map((d) => (d.id === doc.id ? { ...d, status: "ready" } : d)),
+          );
+          setProcessingSteps((prev) => { const next = { ...prev }; delete next[doc.id]; return next; });
+          es.close();
+          fetchDocs();
+        } else if (event.error) {
+          setDocs((prev) =>
+            prev.map((d) => (d.id === doc.id ? { ...d, status: "failed" } : d)),
+          );
+          setProcessingSteps((prev) => { const next = { ...prev }; delete next[doc.id]; return next; });
+          es.close();
+        }
+      };
+
+      es.onerror = () => es.close();
+
+      return es;
+    });
+
+    return () => sources.forEach((es) => es.close());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docs.filter((d) => d.status === "processing").map((d) => d.id).join(",")]);
 
   const readyCount = docs.filter((d) => d.status === "ready").length;
   const uploadedCount = docs.filter((d) => d.status === "uploaded").length;
@@ -842,7 +888,7 @@ export default function DashboardPage() {
                       </p>
                     </div>
 
-                    <StatusBadge status={doc.status} />
+                    <StatusBadge status={doc.status} step={processingSteps[doc.id]} />
 
                     {doc.status === "ready" && (
                       <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/3 hover:bg-white/8 text-sm font-semibold text-white transition-all shrink-0">

@@ -3,7 +3,7 @@ import { s3 } from "../config/s3";
 
 export async function getFileFromS3(key: string) {
   const command = new GetObjectCommand({
-    Bucket: process.env.S3_BUCKET!,
+    Bucket: process.env.AWS_S3_BUCKET_NAME!,
     Key: key,
   });
 
