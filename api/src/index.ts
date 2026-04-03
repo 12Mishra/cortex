@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
-import { fileRouter } from "./routes/file.route";
+import { fileRouter } from "./routes/file.route.ts";
 import cors from "cors";
 
 const app = express();
@@ -17,8 +17,8 @@ const corsOptions: cors.CorsOptions = {
       callback(new Error("Not allowed by CORS"));
     }
   },
-  credentials: true, 
-  optionsSuccessStatus: 200, 
+  credentials: true,
+  optionsSuccessStatus: 200,
 };
 
 app.use(cors(corsOptions));
