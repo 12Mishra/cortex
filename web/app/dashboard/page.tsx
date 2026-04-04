@@ -51,7 +51,6 @@ function StatusBadge({ status, step }: { status: string; step?: string }) {
       </span>
     );
   }
-  // pending / unknown
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-on-surface-variant text-xs font-medium">
       <span className="w-1.5 h-1.5 rounded-full bg-on-surface-variant animate-pulse" />
@@ -67,15 +66,17 @@ interface FileEntry {
   state: FileUploadState;
   progress: number; // 0-100
   error?: string;
-  documentId?: string; // set after confirm step succeeds
+  documentId?: string; 
 }
 
 function UploadModal({
   onClose,
   onUploaded,
+  onProcessingStarted,
 }: {
   onClose: () => void;
   onUploaded?: () => void;
+  onProcessingStarted?: (docIds: string[]) => void;
 }) {
   const [isDragging, setIsDragging] = useState(false);
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -221,9 +222,9 @@ function UploadModal({
           }),
         ),
       );
+      onProcessingStarted?.(docIds);
     } finally {
       setIsProcessing(false);
-      onUploaded?.();
       onClose();
     }
   };
@@ -527,7 +528,6 @@ export default function DashboardPage() {
   >("dashboard");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
-  // Maps docId → live step message from SSE
   const [processingSteps, setProcessingSteps] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -543,7 +543,6 @@ export default function DashboardPage() {
       const json = await res.json();
       setDocs(json.data ?? []);
     } catch {
-      // silently fail — list stays empty
     } finally {
       setDocsLoading(false);
     }
@@ -594,7 +593,6 @@ export default function DashboardPage() {
     });
 
     return () => sources.forEach((es) => es.close());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docs.filter((d) => d.status === "processing").map((d) => d.id).join(",")]);
 
   const readyCount = docs.filter((d) => d.status === "ready").length;
@@ -860,46 +858,70 @@ export default function DashboardPage() {
                 {docs.map((doc) => (
                   <div
                     key={doc.id}
-                    className="flex items-center gap-4 px-4 py-4 rounded-xl bg-surface-container-low border border-white/5 hover:border-white/10 hover:bg-surface-container transition-all"
+                    className="flex flex-col px-4 py-4 rounded-xl bg-surface-container-low border border-white/5 hover:border-white/10 hover:bg-surface-container transition-all gap-2"
                   >
-                    <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
-                      <span
-                        className="material-symbols-outlined text-on-surface-variant"
-                        style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }}
-                      >
-                        description
-                      </span>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-white truncate">
-                        {doc.fileName}
-                      </p>
-                      <p className="text-xs text-on-surface-variant mt-0.5">
-                        {doc.fileSize
-                          ? `${(doc.fileSize / 1024 / 1024).toFixed(1)} MB · `
-                          : ""}
-                        {new Date(doc.createdAt).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-
-                    <StatusBadge status={doc.status} step={processingSteps[doc.id]} />
-
-                    {doc.status === "ready" && (
-                      <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/3 hover:bg-white/8 text-sm font-semibold text-white transition-all shrink-0">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
                         <span
-                          className="material-symbols-outlined"
-                          style={{ fontSize: "16px", fontVariationSettings: "'FILL' 0" }}
+                          className="material-symbols-outlined text-on-surface-variant"
+                          style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }}
                         >
-                          chat_bubble_outline
+                          description
                         </span>
-                        Chat
-                      </button>
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white truncate">
+                          {doc.fileName}
+                        </p>
+                        <p className="text-xs text-on-surface-variant mt-0.5">
+                          {doc.fileSize
+                            ? `${(doc.fileSize / 1024 / 1024).toFixed(1)} MB · `
+                            : ""}
+                          {new Date(doc.createdAt).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+
+                      <StatusBadge status={doc.status} step={processingSteps[doc.id]} />
+
+                      {doc.status === "ready" && (
+                        <button
+                          onClick={() => router.push(`/chat/${doc.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-white/10 bg-white/3 hover:bg-white/8 text-sm font-semibold text-white transition-all shrink-0"
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: "16px", fontVariationSettings: "'FILL' 0" }}
+                          >
+                            chat_bubble_outline
+                          </span>
+                          Chat
+                        </button>
+                      )}
+                    </div>
+
+                    {doc.status === "processing" && (
+                      <div className="flex flex-col gap-1">
+                        <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary-fixed"
+                            style={{
+                              width: "100%",
+                              animation: "processing-bar 1.8s ease-in-out infinite",
+                            }}
+                          />
+                        </div>
+                        {processingSteps[doc.id] && (
+                          <p className="text-[11px] text-on-surface-variant truncate">
+                            {processingSteps[doc.id]}
+                          </p>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
@@ -910,7 +932,17 @@ export default function DashboardPage() {
       </main>
 
       {showUpload && (
-        <UploadModal onClose={() => setShowUpload(false)} onUploaded={fetchDocs} />
+        <UploadModal
+          onClose={() => setShowUpload(false)}
+          onUploaded={fetchDocs}
+          onProcessingStarted={(docIds) => {
+            setDocs((prev) =>
+              prev.map((d) =>
+                docIds.includes(d.id) ? { ...d, status: "processing" } : d,
+              ),
+            );
+          }}
+        />
       )}
     </div>
   );

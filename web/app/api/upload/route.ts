@@ -70,11 +70,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ document }, { status: 201 });
     }
   } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: "Internal Server Error" },
-        { status: 500 },
-      );
-    }
+    console.error("[upload] Error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Internal Server Error" },
+      { status: 500 },
+    );
   }
 }
