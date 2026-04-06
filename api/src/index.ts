@@ -8,7 +8,7 @@ import { rateLimit } from "express-rate-limit";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
-const allowedOrigins = ["http://localhost:3000"];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? "http://localhost:3000").split(",").map(s => s.trim());
 
 app.use(express.json());
 const corsOptions: cors.CorsOptions = {

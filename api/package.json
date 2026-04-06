@@ -7,8 +7,8 @@
     "dev": "nodemon --exec ts-node src/index.ts",
     "dev:worker": "nodemon --exec ts-node src/worker/file.worker.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "start:worker": "node dist/worker/file.worker.js"
+    "start": "tsx src/index.ts",
+    "start:worker": "tsx src/worker/file.worker.ts"
   },
   "keywords": [],
   "author": "",
@@ -35,6 +35,7 @@
     "express-rate-limit": "^8.3.2",
     "ioredis": "^5.10.1",
     "pdf-parse": "^1.1.1",
-    "pg": "^8.20.0"
+    "pg": "^8.20.0",
+    "tsx": "^4.21.0"
   }
 }

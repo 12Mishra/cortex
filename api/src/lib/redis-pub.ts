@@ -1,9 +1,7 @@
 import { Redis } from "ioredis";
 
 // Separate connection – pub/sub requires a dedicated client
-const publisher = new Redis({
-  host: "localhost",
-  port: 6379,
+const publisher = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
   maxRetriesPerRequest: null,
 });
 
