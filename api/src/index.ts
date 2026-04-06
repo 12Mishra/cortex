@@ -2,7 +2,9 @@ import dotenv from "dotenv";
 dotenv.config();
 import express from "express";
 import { fileRouter } from "./routes/file.route.ts";
+import { chatRouter } from "./routes/chat.route.ts";
 import cors from "cors";
+import { rateLimit } from "express-rate-limit";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -23,7 +25,17 @@ const corsOptions: cors.CorsOptions = {
 
 app.use(cors(corsOptions));
 
+const chatLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 15,
+  keyGenerator: (req) => (req.headers["x-user-id"] as string) || req.ip || "anonymous",
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Rate limit exceeded. You can send up to 15 messages per minute." },
+});
+
 app.use("/file", fileRouter);
+app.use("/chat", chatLimiter, chatRouter);
 
 app.listen(PORT, () => {
   console.log(`Server listening on ${PORT}`);
