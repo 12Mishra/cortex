@@ -1,37 +1,41 @@
-const CHUNK_SIZE = 800;   
-const CHUNK_OVERLAP = 150; 
+const CHUNK_SIZE = 800;
+const CHUNK_OVERLAP = 150;
 
 export function chunkText(text: string): string[] {
-  const cleaned = text.replace(/\s+/g, " ").trim();
-  if (cleaned.length === 0) return [];
+  const cleaned = text.replace(/[^a-zA-Z0-9.,!?()\-\s]/g, "");
+  if (!cleaned) return [];
+
+  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
 
   const chunks: string[] = [];
-  let start = 0;
+  let currentSentences: string[] = [];
 
-  while (start < cleaned.length) {
-    let end = start + CHUNK_SIZE;
+  for (const sentence of sentences) {
+    const joined = currentSentences.join(" ");
 
-    if (end < cleaned.length) {
-      const searchFrom = start + Math.floor(CHUNK_SIZE * 0.7);
-      const sentenceEnd = cleaned.search(
-        new RegExp(`[.!?](?=\\s)`, "g"),
-      );
-
-      let breakAt = -1;
-      for (let i = end; i >= searchFrom; i--) {
-        if (".!?".includes(cleaned[i]) && cleaned[i + 1] === " ") {
-          breakAt = i + 1;
-          break;
-        }
+    if ((joined + " " + sentence).length <= CHUNK_SIZE) {
+      currentSentences.push(sentence);
+    } else {
+      if (currentSentences.length > 0) {
+        chunks.push(currentSentences.join(" ").trim());
       }
 
-      if (breakAt !== -1) end = breakAt;
+      // Build overlap from whole trailing sentences whose total length <= CHUNK_OVERLAP
+      const overlapSentences: string[] = [];
+      let overlapLen = 0;
+      for (let i = currentSentences.length - 1; i >= 0; i--) {
+        const s = currentSentences[i];
+        if (overlapLen + s.length + 1 > CHUNK_OVERLAP) break;
+        overlapSentences.unshift(s);
+        overlapLen += s.length + 1;
+      }
+
+      currentSentences = [...overlapSentences, sentence];
     }
+  }
 
-    const chunk = cleaned.slice(start, Math.min(end, cleaned.length)).trim();
-    if (chunk.length > 0) chunks.push(chunk);
-
-    start = end - CHUNK_OVERLAP;
+  if (currentSentences.length > 0) {
+    chunks.push(currentSentences.join(" ").trim());
   }
 
   return chunks;

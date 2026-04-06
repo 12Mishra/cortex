@@ -5,7 +5,6 @@ import { subscribeToFileProgress } from "../lib/redis-sub";
 
 export const fileRouter = express.Router();
 
-// ── POST /file/process ──────────────────────────────────────────────
 fileRouter.post("/process", async (req, res) => {
   const { fileId } = req.body;
 

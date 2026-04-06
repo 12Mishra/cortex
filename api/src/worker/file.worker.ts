@@ -18,7 +18,6 @@ const worker = new Worker(
     const fileId = file.id;
 
     try {
-      // ── 1. Mark processing ───────────────────────────────────
       await prisma.document.update({
         where: { id: fileId },
         data: { status: "processing" },
@@ -29,7 +28,6 @@ const worker = new Worker(
         message: "Downloading file from S3…",
       });
 
-      // ── 2. Download from S3 ──────────────────────────────────
       const stream = await getFileFromS3(file.s3Key);
       const buffer = await streamToBuffer(stream);
       console.log(`[worker] Downloaded ${buffer.byteLength} bytes`);
@@ -39,7 +37,6 @@ const worker = new Worker(
         message: "Extracting text from PDF…",
       });
 
-      // ── 3. Extract PDF text ──────────────────────────────────
       const pdfData = await pdfParse(buffer);
       const text = pdfData.text;
       console.log(
@@ -66,11 +63,9 @@ const worker = new Worker(
         message: "Splitting text into chunks…",
       });
 
-      // ── 4. Chunk text ────────────────────────────────────────
       const chunks = chunkText(text);
       console.log(`[worker] ${chunks.length} chunks created`);
 
-      // ── 5. Generate embeddings in batches ────────────────────
       const BATCH_SIZE = 10;
       const totalBatches = Math.ceil(chunks.length / BATCH_SIZE);
       const allEmbeddings: number[][] = [];
@@ -95,8 +90,6 @@ const worker = new Worker(
         message: "Storing chunks in vector database…",
       });
 
-      // ── 6. Persist chunks + embeddings ───────────────────────
-      // vector(768) is unsupported by Prisma — use raw SQL with ::vector cast
       await prisma.documentChunk.deleteMany({ where: { documentId: fileId } });
 
       for (let i = 0; i < chunks.length; i++) {
@@ -120,7 +113,6 @@ const worker = new Worker(
 
       console.log(`[worker] Stored ${chunks.length} chunks`);
 
-      // ── 7. Mark ready ────────────────────────────────────────
       await prisma.document.update({
         where: { id: fileId },
         data: { status: "ready", processedAt: new Date() },
@@ -155,3 +147,5 @@ const worker = new Worker(
 
 worker.on("completed", (job) => console.log(`[worker] Job ${job.id} completed`));
 worker.on("failed", (job, err) => console.error(`[worker] Job ${job?.id} failed:`, err));
+
+console.log("[worker] Ready and waiting for jobs on queue: file-queue");

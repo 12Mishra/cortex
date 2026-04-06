@@ -9,7 +9,7 @@ const genai = new GoogleGenAI({});
 
 
 const GENERATION_MODEL = "gemini-3.1-pro-preview";
-const SIMILARITY_FLOOR = 0.5;
+const SIMILARITY_FLOOR = 0.7;
 const HISTORY_LIMIT = 10; 
 
 const SYSTEM_INSTRUCTION = `You are Cortex, an AI assistant that answers questions strictly based on provided document context.
@@ -83,6 +83,8 @@ chatRouter.post("/", async (req, res) => {
       });
       return res.end();
     }
+    
+    console.log("Retrieved chunks:", chunks);
 
     if (!activeConversationId) {
       const conversation = await prisma.conversation.create({
