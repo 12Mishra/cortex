@@ -6,6 +6,7 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  output          = "../web/node_modules/.prisma/client"
 }
 
 datasource db {
@@ -42,14 +43,14 @@ model Document {
 }
 
 model DocumentChunk {
-  id         String   @id @default(uuid())
+  id         String                      @id @default(uuid())
   documentId String
-  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunkIndex Int
   content    String
   embedding  Unsupported("vector(768)")?
   tokenCount Int?
-  createdAt  DateTime @default(now())
+  createdAt  DateTime                    @default(now())
 
   @@index([documentId])
 }
