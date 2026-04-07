@@ -215,7 +215,7 @@ function UploadModal({
     try {
       await Promise.all(
         docIds.map((id) =>
-          fetch(`${process.env.EXPRESS_API_URL}/file/process`, {
+          fetch(`/api/file/process`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fileId: id }),
@@ -558,7 +558,7 @@ export default function DashboardPage() {
     if (processingDocs.length === 0) return;
 
     const sources = processingDocs.map((doc) => {
-      const es = new EventSource(`${process.env.NEXT_PUBLIC_API_URL}/file/status/${doc.id}`);
+      const es = new EventSource(`/api/file/status/${doc.id}`);
 
       es.onmessage = (e) => {
         const event = JSON.parse(e.data) as {

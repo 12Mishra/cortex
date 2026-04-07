@@ -28,7 +28,7 @@ app.use(cors(corsOptions));
 const chatLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 15,
-  keyGenerator: (req) => (req.headers["x-user-id"] as string) || req.ip || "anonymous",
+  keyGenerator: (req) => (req.headers["x-user-id"] as string) || "anonymous",
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Rate limit exceeded. You can send up to 15 messages per minute." },
