@@ -1,0 +1,70 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  avatarUrl     String?
+  provider      String
+  providerId    String
+  createdAt     DateTime       @default(now())
+  documents     Document[]
+  conversations Conversation[]
+}
+
+model Document {
+  id            String          @id @default(uuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id])
+  fileName      String
+  s3Key         String
+  fileSize      Int?
+  mimeType      String?
+  status        String          @default("pending")
+  errorMessage  String?
+  createdAt     DateTime        @default(now())
+  processedAt   DateTime?
+  chunks        DocumentChunk[]
+  conversations Conversation[]
+}
+
+model DocumentChunk {
+  id         String                      @id @default(uuid())
+  documentId String
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex Int
+  content    String
+  embedding  Unsupported("vector(768)")?
+  tokenCount Int?
+  createdAt  DateTime                    @default(now())
+
+  @@index([documentId])
+}
+
+model Conversation {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  documentId String
+  document   Document  @relation(fields: [documentId], references: [id])
+  createdAt  DateTime  @default(now())
+  messages   Message[]
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  role           String
+  content        String
+  tokensUsed     Int?
+  createdAt      DateTime     @default(now())
+}
