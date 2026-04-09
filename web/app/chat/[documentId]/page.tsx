@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, use } from "react";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface Doc {
   id: string;
@@ -113,6 +113,8 @@ export default function ChatPage({
   const { documentId } = use(params);
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialConversationId = searchParams.get("conversationId");
 
   const [doc, setDoc] = useState<Doc | null>(null);
   const [docLoading, setDocLoading] = useState(true);
@@ -181,9 +183,13 @@ export default function ChatPage({
   useEffect(() => {
     if (status !== "authenticated") return;
     fetchConversations().then((list) => {
-      if (list.length > 0) loadConversation(list[0].id);
+      if (list.length === 0) return;
+      const target = initialConversationId
+        ? (list.find((c) => c.id === initialConversationId) ?? list[0])
+        : list[0];
+      loadConversation(target.id);
     });
-  }, [status, fetchConversations, loadConversation]);
+  }, [status, fetchConversations, loadConversation, initialConversationId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

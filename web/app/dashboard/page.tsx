@@ -4,6 +4,24 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { RotateCcw } from "lucide-react";
+
+interface ConversationMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+}
+
+interface Conversation {
+  id: string;
+  createdAt: string;
+  document: {
+    id: string;
+    fileName: string;
+  };
+  messages: ConversationMessage[];
+}
 
 interface Doc {
   id: string;
@@ -18,7 +36,15 @@ interface Doc {
   processedAt: string | null;
 }
 
-function StatusBadge({ status, step }: { status: string; step?: string }) {
+function StatusBadge({
+  status,
+  step,
+  onReprocess,
+}: {
+  status: string;
+  step?: string;
+  onReprocess?: () => void;
+}) {
   if (status === "ready") {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-medium">
@@ -40,6 +66,7 @@ function StatusBadge({ status, step }: { status: string; step?: string }) {
       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-secondary/10 border border-secondary/20 text-secondary text-xs font-medium">
         <span className="w-1.5 h-1.5 rounded-full bg-secondary" />
         Uploaded
+        <RotateCcw onClick={onReprocess} />
       </span>
     );
   }
@@ -66,7 +93,7 @@ interface FileEntry {
   state: FileUploadState;
   progress: number; // 0-100
   error?: string;
-  documentId?: string; 
+  documentId?: string;
 }
 
 function UploadModal({
@@ -188,7 +215,11 @@ function UploadModal({
           if (!confirmRes.ok) throw new Error("Failed to save document");
           const { document } = await confirmRes.json();
 
-          setEntryState(i, { state: "done", progress: 100, documentId: document.id });
+          setEntryState(i, {
+            state: "done",
+            progress: 100,
+            documentId: document.id,
+          });
         } catch (err) {
           setEntryState(i, {
             state: "error",
@@ -528,7 +559,10 @@ export default function DashboardPage() {
   >("dashboard");
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
-  const [processingSteps, setProcessingSteps] = useState<Record<string, string>>({});
+  const [processingSteps, setProcessingSteps] = useState<
+    Record<string, string>
+  >({});
+  const [recentChats, setRecentChats] = useState<Conversation[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -547,6 +581,17 @@ export default function DashboardPage() {
       setDocsLoading(false);
     }
   }, []);
+
+  const handleReprocess = async (docId: string) => {
+    await fetch("/api/file/process", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fileId: docId }),
+    });
+    setDocs((prev) =>
+      prev.map((d) => (d.id === docId ? { ...d, status: "processing" } : d)),
+    );
+  };
 
   useEffect(() => {
     if (status === "authenticated") fetchDocs();
@@ -575,14 +620,22 @@ export default function DashboardPage() {
           setDocs((prev) =>
             prev.map((d) => (d.id === doc.id ? { ...d, status: "ready" } : d)),
           );
-          setProcessingSteps((prev) => { const next = { ...prev }; delete next[doc.id]; return next; });
+          setProcessingSteps((prev) => {
+            const next = { ...prev };
+            delete next[doc.id];
+            return next;
+          });
           es.close();
           fetchDocs();
         } else if (event.error) {
           setDocs((prev) =>
             prev.map((d) => (d.id === doc.id ? { ...d, status: "failed" } : d)),
           );
-          setProcessingSteps((prev) => { const next = { ...prev }; delete next[doc.id]; return next; });
+          setProcessingSteps((prev) => {
+            const next = { ...prev };
+            delete next[doc.id];
+            return next;
+          });
           es.close();
         }
       };
@@ -593,8 +646,28 @@ export default function DashboardPage() {
     });
 
     return () => sources.forEach((es) => es.close());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docs.filter((d) => d.status === "processing").map((d) => d.id).join(",")]);
+  }, [
+    docs
+      .filter((d) => d.status === "processing")
+      .map((d) => d.id)
+      .join(","),
+  ]);
+
+  useEffect(() => {
+    const fetchUserChats = async () => {
+      try {
+        const response = await fetch("/api/conversations/recent");
+        const json = await response.json();
+        if (response.status === 200) {
+          setRecentChats(json.data ?? []);
+        }
+      } catch (error) {
+        console.error("Error fetching user chats:", error);
+      }
+    };
+
+    if (status === "authenticated") fetchUserChats();
+  }, [status]);
 
   const readyCount = docs.filter((d) => d.status === "ready").length;
   const uploadedCount = docs.filter((d) => d.status === "uploaded").length;
@@ -694,9 +767,39 @@ export default function DashboardPage() {
             <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
               Recent Chats
             </p>
-            <p className="px-3 text-xs text-on-surface-variant/40 italic">
-              No chats yet
-            </p>
+            {recentChats.length === 0 ? (
+              <p className="px-3 text-xs text-on-surface-variant/40 italic">
+                No chats yet
+              </p>
+            ) : (
+              <div className="space-y-0.5">
+                {recentChats.map((chat) => {
+                  const firstUserMsg = chat.messages.find(
+                    (m) => m.role === "user",
+                  );
+                  const preview = firstUserMsg?.content ?? "Untitled chat";
+                  const docName = chat.document.fileName.replace(/\.pdf$/i, "");
+                  return (
+                    <button
+                      key={chat.id}
+                      onClick={() =>
+                        router.push(
+                          `/chat/${chat.document.id}?conversationId=${chat.id}`,
+                        )
+                      }
+                      className="w-full flex flex-col gap-0.5 px-3 py-2 rounded-lg text-left hover:bg-white/5 transition-all group"
+                    >
+                      <span className="text-xs font-medium text-on-surface-variant group-hover:text-white truncate transition-colors">
+                        {preview}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant/40 truncate">
+                        {docName}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </nav>
 
@@ -847,12 +950,19 @@ export default function DashboardPage() {
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <span
                   className="material-symbols-outlined text-on-surface-variant/30 mb-3"
-                  style={{ fontSize: "40px", fontVariationSettings: "'FILL' 0" }}
+                  style={{
+                    fontSize: "40px",
+                    fontVariationSettings: "'FILL' 0",
+                  }}
                 >
                   folder_open
                 </span>
-                <p className="text-sm font-semibold text-on-surface-variant">No documents yet</p>
-                <p className="text-xs text-on-surface-variant/60 mt-1">Upload a PDF to get started</p>
+                <p className="text-sm font-semibold text-on-surface-variant">
+                  No documents yet
+                </p>
+                <p className="text-xs text-on-surface-variant/60 mt-1">
+                  Upload a PDF to get started
+                </p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -865,7 +975,10 @@ export default function DashboardPage() {
                       <div className="w-10 h-10 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
                         <span
                           className="material-symbols-outlined text-on-surface-variant"
-                          style={{ fontSize: "20px", fontVariationSettings: "'FILL' 1" }}
+                          style={{
+                            fontSize: "20px",
+                            fontVariationSettings: "'FILL' 1",
+                          }}
                         >
                           description
                         </span>
@@ -879,16 +992,23 @@ export default function DashboardPage() {
                           {doc.fileSize
                             ? `${(doc.fileSize / 1024 / 1024).toFixed(1)} MB · `
                             : ""}
-                          {new Date(doc.createdAt).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {new Date(doc.createdAt).toLocaleDateString(
+                            undefined,
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
                         </p>
                       </div>
 
-                      <StatusBadge status={doc.status} step={processingSteps[doc.id]} />
+                      <StatusBadge
+                        status={doc.status}
+                        step={processingSteps[doc.id]}
+                        onReprocess={() => handleReprocess(doc.id)}
+                      />
 
                       {doc.status === "ready" && (
                         <button
@@ -897,7 +1017,10 @@ export default function DashboardPage() {
                         >
                           <span
                             className="material-symbols-outlined"
-                            style={{ fontSize: "16px", fontVariationSettings: "'FILL' 0" }}
+                            style={{
+                              fontSize: "16px",
+                              fontVariationSettings: "'FILL' 0",
+                            }}
                           >
                             chat_bubble_outline
                           </span>
@@ -913,7 +1036,8 @@ export default function DashboardPage() {
                             className="h-full rounded-full bg-primary-fixed"
                             style={{
                               width: "100%",
-                              animation: "processing-bar 1.8s ease-in-out infinite",
+                              animation:
+                                "processing-bar 1.8s ease-in-out infinite",
                             }}
                           />
                         </div>
