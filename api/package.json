@@ -7,7 +7,6 @@
     "postinstall": "prisma generate --schema ./prisma/schema.prisma",
     "dev": "nodemon --exec ts-node src/index.ts",
     "dev:worker": "nodemon --exec ts-node src/worker/file.worker.ts",
-    "build": "tsc",
     "start": "tsx src/index.ts",
     "start:worker": "tsx src/worker/file.worker.ts"
   },
