@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "postinstall": "prisma generate --schema ../web/prisma/schema.prisma",
     "dev": "nodemon --exec ts-node src/index.ts",
     "dev:worker": "nodemon --exec ts-node src/worker/file.worker.ts",
     "build": "tsc",
