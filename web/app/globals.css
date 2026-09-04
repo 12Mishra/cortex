@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  /* Surface tokens */
   --color-background: #0A0A0A;
   --color-surface: #0A0A0A;
   --color-surface-dim: #131313;
@@ -14,12 +13,10 @@
   --color-surface-container-highest: #353534;
   --color-surface-tint: #adc6ff;
 
-  /* On-surface tokens */
   --color-on-surface: #e5e2e1;
   --color-on-surface-variant: #c6c6c6;
   --color-on-background: #e5e2e1;
 
-  /* Primary tokens */
   --color-primary: #ffffff;
   --color-primary-fixed: #005ac2;
   --color-primary-fixed-dim: #004395;
@@ -30,7 +27,6 @@
   --color-on-primary-container: #000000;
   --color-inverse-primary: #005ac2;
 
-  /* Secondary tokens */
   --color-secondary: #ddb7ff;
   --color-secondary-fixed: #ddb7ff;
   --color-secondary-fixed-dim: #ca93ff;
@@ -40,7 +36,6 @@
   --color-on-secondary-fixed-variant: #590099;
   --color-on-secondary-container: #f0dbff;
 
-  /* Tertiary tokens */
   --color-tertiary: #e5e2e1;
   --color-tertiary-fixed: #5f5e5e;
   --color-tertiary-fixed-dim: #474646;
@@ -50,21 +45,17 @@
   --color-on-tertiary-fixed-variant: #e5e2e1;
   --color-on-tertiary-container: #000000;
 
-  /* Error tokens */
   --color-error: #ffb4ab;
   --color-error-container: #93000a;
   --color-on-error: #690005;
   --color-on-error-container: #ffdad6;
 
-  /* Outline tokens */
   --color-outline: #919191;
   --color-outline-variant: #474747;
 
-  /* Inverse tokens */
   --color-inverse-surface: #e5e2e1;
   --color-inverse-on-surface: #313030;
 
-  /* Border radius overrides */
   --radius: 0.125rem;
   --radius-lg: 0.25rem;
   --radius-xl: 0.5rem;
@@ -118,7 +109,6 @@ body {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 }
 
-/* ── Hero float ─────────────────────────────────────── */
 @keyframes hero-float {
   0%, 100% { transform: translateY(0px); }
   50%       { transform: translateY(-10px); }
@@ -132,7 +122,6 @@ body {
   animation-play-state: paused;
 }
 
-/* ── Scroll reveal ──────────────────────────────────── */
 .reveal {
   opacity: 0;
   transform: translateY(20px);
@@ -146,7 +135,6 @@ body {
   transform: translateY(0);
 }
 
-/* ── Auth card entrance ─────────────────────────────── */
 @keyframes auth-card-in {
   from { opacity: 0; transform: translateY(16px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -156,19 +144,16 @@ body {
   animation: auth-card-in 0.4s ease-out forwards;
 }
 
-/* ── CTA border radius fix ──────────────────────────── */
 .cta-card-border::before {
   border-radius: 1rem;
 }
 
-/* ── Indeterminate processing bar ───────────────────── */
 @keyframes processing-bar {
   0%   { transform: translateX(-100%); width: 60%; }
   50%  { transform: translateX(75%);   width: 60%; }
   100% { transform: translateX(200%);  width: 60%; }
 }
 
-/* ── Typing indicator dots ───────────────────────────── */
 @keyframes typing-dot {
   0%, 60%, 100% { transform: translateY(0);    opacity: 0.4; }
   30%            { transform: translateY(-4px); opacity: 1;   }

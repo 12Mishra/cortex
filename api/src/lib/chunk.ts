@@ -1,6 +1,12 @@
 const CHUNK_SIZE = 800;
 const CHUNK_OVERLAP = 150;
 
+export interface PageChunk {
+  content: string;
+  pageNumber: number;
+  chunkIndex: number;
+}
+
 export function chunkText(text: string): string[] {
   const cleaned = text.replace(/[^a-zA-Z0-9.,!?()\-\s]/g, "");
   if (!cleaned) return [];
@@ -20,7 +26,6 @@ export function chunkText(text: string): string[] {
         chunks.push(currentSentences.join(" ").trim());
       }
 
-      // Build overlap from whole trailing sentences whose total length <= CHUNK_OVERLAP
       const overlapSentences: string[] = [];
       let overlapLen = 0;
       for (let i = currentSentences.length - 1; i >= 0; i--) {
@@ -39,4 +44,20 @@ export function chunkText(text: string): string[] {
   }
 
   return chunks;
+}
+
+export function chunkPageTexts(
+  pageTexts: { pageNumber: number; text: string }[],
+): PageChunk[] {
+  const result: PageChunk[] = [];
+  let globalIndex = 0;
+
+  for (const { pageNumber, text } of pageTexts) {
+    const chunks = chunkText(text);
+    for (const chunk of chunks) {
+      result.push({ content: chunk, pageNumber, chunkIndex: globalIndex++ });
+    }
+  }
+
+  return result;
 }

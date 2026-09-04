@@ -47,6 +47,7 @@ model DocumentChunk {
   documentId String
   document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
   chunkIndex Int
+  pageNumber Int?
   content    String
   embedding  Unsupported("vector(768)")?
   tokenCount Int?

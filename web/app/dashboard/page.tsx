@@ -30,7 +30,7 @@ interface Doc {
   s3Key: string;
   fileSize: number | null;
   mimeType: string | null;
-  status: string; // "pending" | "uploaded" | "processing" | "ready" | "failed"
+  status: string;
   errorMessage: string | null;
   createdAt: string;
   processedAt: string | null;
@@ -91,7 +91,7 @@ type FileUploadState = "idle" | "uploading" | "done" | "error";
 interface FileEntry {
   file: File;
   state: FileUploadState;
-  progress: number; // 0-100
+  progress: number;
   error?: string;
   documentId?: string;
 }
@@ -280,7 +280,6 @@ function UploadModal({
           animation: "auth-card-in 0.25s ease-out forwards",
         }}
       >
-        {/* Header */}
         <div className="flex items-start justify-between p-6 pb-4">
           <div>
             <h2 className="text-lg font-bold text-white tracking-tight">
@@ -305,7 +304,6 @@ function UploadModal({
           </button>
         </div>
 
-        {/* Drop zone — hide once uploading starts */}
         {!isUploading && !uploadDone && (
           <div className="px-6">
             <div
@@ -373,7 +371,6 @@ function UploadModal({
           </div>
         )}
 
-        {/* File list with per-file progress */}
         {entries.length > 0 && (
           <div className="px-6 mt-3 space-y-2 max-h-48 overflow-y-auto">
             {entries.map(({ file, state, progress, error }, i) => (
@@ -426,7 +423,6 @@ function UploadModal({
                     </span>
                   )}
                 </div>
-                {/* Progress bar */}
                 {(state === "uploading" || state === "done") && (
                   <div className="h-1 bg-white/5 rounded-full overflow-hidden">
                     <div
@@ -449,7 +445,6 @@ function UploadModal({
           </div>
         )}
 
-        {/* Step-by-step guide */}
         <div className="px-6 mt-4">
           <button
             onClick={() => setGuideOpen((o) => !o)}
@@ -489,7 +484,6 @@ function UploadModal({
           )}
         </div>
 
-        {/* Footer actions */}
         <div className="flex items-center justify-end gap-3 p-6 pt-5">
           <button
             onClick={onClose}
@@ -597,7 +591,6 @@ export default function DashboardPage() {
     if (status === "authenticated") fetchDocs();
   }, [status, fetchDocs]);
 
-  // Open an EventSource for every doc in "processing" state
   useEffect(() => {
     const processingDocs = docs.filter((d) => d.status === "processing");
     if (processingDocs.length === 0) return;

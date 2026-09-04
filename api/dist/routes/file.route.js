@@ -28,10 +28,6 @@ exports.fileRouter.post("/process", async (req, res) => {
             file,
         });
         console.log("--- control reached here 2---");
-        // return res.status(200).json({
-        //     success:true,
-        //     message:"File started"
-        // })
     }
     res.json({ message: "Email job queued!" });
 });

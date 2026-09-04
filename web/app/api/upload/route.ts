@@ -6,8 +6,6 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { prisma } from "@/lib/prisma";
 import { randomUUID } from "crypto";
 
-// POST /api/upload   { action: "presign", fileName, fileSize, mimeType }
-// POST /api/upload   { action: "confirm", s3Key, fileName, fileSize, mimeType }
 
 export async function POST(req: NextRequest) {
   try {

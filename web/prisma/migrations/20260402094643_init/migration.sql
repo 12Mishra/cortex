@@ -1,7 +1,5 @@
--- CreateExtension
 CREATE EXTENSION IF NOT EXISTS "vector";
 
--- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -14,7 +12,6 @@ CREATE TABLE "User" (
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "Document" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -30,7 +27,6 @@ CREATE TABLE "Document" (
     CONSTRAINT "Document_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "DocumentChunk" (
     "id" TEXT NOT NULL,
     "documentId" TEXT NOT NULL,
@@ -43,7 +39,6 @@ CREATE TABLE "DocumentChunk" (
     CONSTRAINT "DocumentChunk_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "Conversation" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
@@ -53,7 +48,6 @@ CREATE TABLE "Conversation" (
     CONSTRAINT "Conversation_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "Message" (
     "id" TEXT NOT NULL,
     "conversationId" TEXT NOT NULL,
@@ -65,23 +59,16 @@ CREATE TABLE "Message" (
     CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
--- CreateIndex
 CREATE INDEX "DocumentChunk_documentId_idx" ON "DocumentChunk"("documentId");
 
--- AddForeignKey
 ALTER TABLE "Document" ADD CONSTRAINT "Document_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "DocumentChunk" ADD CONSTRAINT "DocumentChunk_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_documentId_fkey" FOREIGN KEY ("documentId") REFERENCES "Document"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

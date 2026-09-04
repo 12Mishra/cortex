@@ -10,14 +10,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { query, documentId, conversationId } = await req.json() as {
+  const { query, documentId, conversationId } = (await req.json()) as {
     query: string;
     documentId: string;
     conversationId?: string;
   };
 
   if (!query?.trim() || !documentId) {
-    return NextResponse.json({ error: "Missing query or documentId" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Missing query or documentId" },
+      { status: 400 },
+    );
   }
 
   const doc = await prisma.document.findUnique({
@@ -30,7 +33,10 @@ export async function POST(req: NextRequest) {
   }
 
   if (doc.status !== "ready") {
-    return NextResponse.json({ error: "Document is not ready" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Document is not ready" },
+      { status: 400 },
+    );
   }
 
   const expressRes = await fetch(`${EXPRESS_API_URL}/chat`, {
@@ -43,21 +49,49 @@ export async function POST(req: NextRequest) {
     body: JSON.stringify({ query, documentId, conversationId }),
   });
 
-  if (!expressRes.ok || !expressRes.body) {
+  if (!expressRes.ok) {
+    const errorBody = await expressRes.text();
+
+    console.error("Express /chat failed:", {
+      status: expressRes.status,
+      statusText: expressRes.statusText,
+      body: errorBody,
+    });
+
     if (expressRes.status === 429) {
       return NextResponse.json(
-        { error: "Rate limit exceeded. You can send up to 15 messages per minute." },
+        {
+          error:
+            "Rate limit exceeded. You can send up to 15 messages per minute.",
+        },
         { status: 429 },
       );
     }
-    return NextResponse.json({ error: "Chat service unavailable" }, { status: 502 });
+
+    return NextResponse.json(
+      {
+        error: "Chat service unavailable",
+        upstreamStatus: expressRes.status,
+        upstreamError: errorBody,
+      },
+      { status: 502 },
+    );
+  }
+
+  if (!expressRes.body) {
+    console.error("Express returned success but no response body");
+
+    return NextResponse.json(
+      { error: "Chat service returned no response body" },
+      { status: 502 },
+    );
   }
 
   return new NextResponse(expressRes.body, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
     },
   });
 }

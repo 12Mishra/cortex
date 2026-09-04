@@ -2,19 +2,19 @@ import express from "express";
 import { GoogleGenAI } from "@google/genai";
 import { prisma } from "../lib/prisma";
 import { generateQueryEmbedding } from "../lib/embed";
+import { hybridSearch } from "../lib/retrieval";
 
 export const chatRouter = express.Router();
 
 const genai = new GoogleGenAI({});
 
-
 const GENERATION_MODEL = "gemini-3.1-pro-preview";
-const SIMILARITY_FLOOR = 0.5;
-const HISTORY_LIMIT = 10; 
+const HISTORY_LIMIT = 10;
 
 const SYSTEM_INSTRUCTION = `You are Cortex, an AI assistant that answers questions strictly based on provided document context.
 Answer only from the context given. If the answer cannot be found in the context, say so clearly.
-Be concise, accurate, and cite relevant details from the context when appropriate.`;
+Be concise, accurate, and cite relevant details from the context when appropriate.
+When referring to a source, use the bracketed reference numbers provided (e.g. [1], [2]).`;
 
 chatRouter.post("/", async (req, res) => {
   const secret = req.headers["x-internal-secret"];
@@ -51,7 +51,7 @@ chatRouter.post("/", async (req, res) => {
   try {
     const doc = await prisma.document.findUnique({
       where: { id: documentId, userId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, fileName: true },
     });
 
     if (!doc || doc.status !== "ready") {
@@ -59,22 +59,10 @@ chatRouter.post("/", async (req, res) => {
       return res.end();
     }
 
-    const queryEmbedding = await generateQueryEmbedding(query.trim());
-    const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+    console.log(`[chat] query="${query.substring(0, 120)}" doc=${documentId}`);
 
-    const chunks = await prisma.$queryRawUnsafe<
-      { content: string; score: number }[]
-    >(
-      `SELECT content, 1 - (embedding <=> $1::vector) AS score
-       FROM "DocumentChunk"
-       WHERE "documentId" = $2
-         AND 1 - (embedding <=> $1::vector) > $3
-       ORDER BY score DESC
-       LIMIT 5`,
-      vectorLiteral,
-      documentId,
-      SIMILARITY_FLOOR,
-    );
+    const queryEmbedding = await generateQueryEmbedding(query.trim());
+    const chunks = await hybridSearch(query.trim(), queryEmbedding, documentId);
 
     if (chunks.length === 0) {
       send({
@@ -83,8 +71,6 @@ chatRouter.post("/", async (req, res) => {
       });
       return res.end();
     }
-    
-    console.log("Retrieved chunks:", chunks);
 
     if (!activeConversationId) {
       const conversation = await prisma.conversation.create({
@@ -104,8 +90,13 @@ chatRouter.post("/", async (req, res) => {
     history.reverse();
 
     const contextText = chunks
-      .map((c, i) => `[${i + 1}] ${c.content}`)
+      .map(
+        (c, i) =>
+          `[${i + 1}]${c.pageNumber != null ? ` (Page ${c.pageNumber})` : ""} ${c.content}`,
+      )
       .join("\n\n");
+
+    console.log(`[chat] context: ${chunks.length} chunks, ~${contextText.length} chars`);
 
     const contents = [
       ...history.map((m) => ({
@@ -154,14 +145,26 @@ chatRouter.post("/", async (req, res) => {
     });
 
     messagesSaved = true;
-    send({ type: "done", conversationId: activeConversationId });
+
+    const citations = chunks
+      .map((c, i) => ({
+        index: i + 1,
+        pageNumber: c.pageNumber,
+        preview: c.content.substring(0, 160),
+      }))
+      .filter((c) => c.pageNumber != null);
+
+    send({ type: "done", conversationId: activeConversationId, citations });
     res.end();
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Internal server error";
+    console.error("[chat] error:", err);
 
     if (createdConversation && !messagesSaved && activeConversationId) {
-      await prisma.conversation.delete({ where: { id: activeConversationId } }).catch(() => {});
+      await prisma.conversation
+        .delete({ where: { id: activeConversationId } })
+        .catch(() => {});
     }
 
     send({ type: "error", message });

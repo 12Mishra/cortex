@@ -65,7 +65,6 @@ export default function Home() {
         <section className="relative pt-48 pb-40 px-8 overflow-hidden">
           <div className="hero-gradient absolute inset-0 -z-10" />
           <div className="max-w-4xl mx-auto text-center space-y-8">
-            {/* Beta pill */}
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-xs text-on-surface-variant tracking-wide">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Now in public beta · Free to get started
@@ -208,7 +207,6 @@ export default function Home() {
                   functions, and decisions. It reads code the way a senior
                   engineer would.
                 </p>
-                {/* Mini mockup */}
                 <div className="mt-auto pt-6 rounded-xl bg-black/50 border border-white/5 p-4 font-mono text-[11px] overflow-hidden">
                   <div className="text-on-surface-variant/40 mb-2">
                     {"// auth/middleware.ts"}
@@ -246,7 +244,6 @@ export default function Home() {
                   your actual content with sources cited — no hallucinations, no
                   guesswork.
                 </p>
-                {/* Mini mockup */}
                 <div className="mt-auto pt-6 rounded-xl bg-black/50 border border-white/5 p-4 text-[11px]">
                   <div className="text-on-surface-variant/50 mb-2 font-mono">
                     How does pricing work?

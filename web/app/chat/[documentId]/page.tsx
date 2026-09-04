@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, use } from "react";
+import { type ReactNode, useState, useRef, useEffect, useCallback, use } from "react";
 import Image from "next/image";
 import { useSession, signOut } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { Check, Copy } from "lucide-react";
 
 interface Doc {
   id: string;
@@ -13,10 +14,17 @@ interface Doc {
   createdAt: string;
 }
 
+interface Citation {
+  index: number;
+  pageNumber: number;
+  preview: string;
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
+  citations?: Citation[];
   createdAt: Date;
 }
 
@@ -24,6 +32,158 @@ interface Conversation {
   id: string;
   createdAt: string;
   messages: { content: string }[];
+}
+
+function renderInlineMarkdown(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|\[[0-9]+\])/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+
+    const value = match[0];
+    if (value.startsWith("**")) {
+      parts.push(
+        <strong key={`${match.index}-${value}`} className="font-semibold text-white">
+          {value.slice(2, -2)}
+        </strong>,
+      );
+    } else {
+      parts.push(
+        <span
+          key={`${match.index}-${value}`}
+          className="mx-0.5 inline-flex items-center rounded-md border border-primary-fixed/25 bg-primary-fixed/10 px-1.5 py-0.5 align-baseline font-mono text-[10px] font-medium leading-none text-primary-fixed"
+        >
+          {value}
+        </span>,
+      );
+    }
+
+    lastIndex = match.index + value.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts;
+}
+
+function FormattedAssistantContent({ content }: { content: string }) {
+  const blocks: ReactNode[] = [];
+  const lines = content.split(/\r?\n/);
+  let paragraph: string[] = [];
+  let listItems: { text: string; level: number; ordered: boolean }[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    const text = paragraph.join(" ").trim();
+    if (text) {
+      blocks.push(
+        <p key={`p-${blocks.length}`} className="leading-7 text-on-surface">
+          {renderInlineMarkdown(text)}
+        </p>,
+      );
+    }
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (listItems.length === 0) return;
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="space-y-2.5">
+        {listItems.map((item, index) => (
+          <li
+            key={`${index}-${item.text}`}
+            className="flex gap-2.5 leading-7 text-on-surface"
+            style={{ marginLeft: `${item.level * 18}px` }}
+          >
+            {item.ordered ? (
+              <span className="mt-0.5 w-5 shrink-0 text-right font-mono text-xs text-primary-fixed">
+                {index + 1}.
+              </span>
+            ) : (
+              <span className="mt-[0.7rem] h-1.5 w-1.5 shrink-0 rounded-full bg-primary-fixed/80" />
+            )}
+            <span className="min-w-0">{renderInlineMarkdown(item.text)}</span>
+          </li>
+        ))}
+      </ul>,
+    );
+    listItems = [];
+  };
+
+  lines.forEach((line) => {
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      blocks.push(
+        <h3 key={`h-${blocks.length}`} className="pt-1 text-base font-semibold leading-7 text-white">
+          {renderInlineMarkdown(heading[2])}
+        </h3>,
+      );
+      return;
+    }
+
+    const bullet = line.match(/^(\s*)[-*]\s+(.+)$/);
+    const ordered = line.match(/^(\s*)\d+[.)]\s+(.+)$/);
+    if (bullet || ordered) {
+      flushParagraph();
+      const match = bullet ?? ordered!;
+      listItems.push({
+        text: match[2].trim(),
+        level: Math.floor(match[1].length / 2),
+        ordered: Boolean(ordered),
+      });
+      return;
+    }
+
+    flushList();
+    paragraph.push(trimmed);
+  });
+
+  flushParagraph();
+  flushList();
+
+  return <div className="space-y-3">{blocks}</div>;
+}
+
+function CopyMessageButton({ content, align = "left" }: { content: string; align?: "left" | "right" }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    if (!content.trim()) return;
+    await navigator.clipboard.writeText(content);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      disabled={!content.trim()}
+      title={copied ? "Copied" : "Copy message"}
+      className={`mt-1 inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/8 bg-white/3 text-on-surface-variant/70 transition-all hover:border-white/15 hover:bg-white/8 hover:text-white disabled:pointer-events-none disabled:opacity-0 ${
+        align === "right" ? "self-end" : "self-start"
+      }`}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+    </button>
+  );
 }
 
 function TypingIndicator() {
@@ -55,7 +215,14 @@ function TypingIndicator() {
   );
 }
 
-function AssistantMessage({ content }: { content: string }) {
+function AssistantMessage({
+  content,
+  citations,
+}: {
+  content: string;
+  citations?: Citation[];
+}) {
+  const pages = citations?.filter((c) => c.pageNumber != null) ?? [];
   return (
     <div className="flex items-end gap-3 max-w-2xl">
       <div className="w-8 h-8 rounded-full bg-primary-fixed/15 border border-primary-fixed/25 flex items-center justify-center shrink-0">
@@ -66,8 +233,30 @@ function AssistantMessage({ content }: { content: string }) {
           hub
         </span>
       </div>
-      <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-surface-container-low border border-white/5 text-sm text-on-surface leading-relaxed whitespace-pre-wrap">
-        {content}
+      <div className="flex flex-col gap-2 min-w-0">
+        <div className="px-5 py-4 rounded-2xl rounded-bl-sm bg-surface-container-low border border-white/5 text-sm text-on-surface shadow-[0_18px_45px_rgba(0,0,0,0.22)]">
+          <FormattedAssistantContent content={content} />
+        </div>
+        <CopyMessageButton content={content} />
+        {pages.length > 0 && content.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-1">
+            {pages.map((c) => (
+              <span
+                key={c.index}
+                title={c.preview}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/4 border border-white/8 text-[10px] text-on-surface-variant cursor-default select-none"
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: "10px" }}
+                >
+                  description
+                </span>
+                p.{c.pageNumber}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -91,8 +280,11 @@ function UserMessage({
           </div>
         )}
       </div>
-      <div className="px-4 py-3 rounded-2xl rounded-br-sm bg-primary-fixed text-white text-sm leading-relaxed whitespace-pre-wrap">
-        {content}
+      <div className="flex flex-col items-end gap-1 min-w-0">
+        <div className="px-4 py-3 rounded-2xl rounded-br-sm bg-primary-fixed text-white text-sm leading-relaxed whitespace-pre-wrap">
+          {content}
+        </div>
+        <CopyMessageButton content={content} align="right" />
       </div>
     </div>
   );
@@ -256,6 +448,7 @@ export default function ChatPage({
               text?: string;
               message?: string;
               conversationId?: string;
+              citations?: Citation[];
             };
 
             if (payload.type === "delta" && payload.text) {
@@ -267,6 +460,15 @@ export default function ChatPage({
                 ),
               );
             } else if (payload.type === "done") {
+              if (payload.citations) {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === assistantId
+                      ? { ...m, citations: payload.citations }
+                      : m,
+                  ),
+                );
+              }
               if (payload.conversationId) {
                 setConversationId(payload.conversationId);
                 if (isNewConversation) {
@@ -346,9 +548,7 @@ export default function ChatPage({
 
   return (
     <div className="flex h-screen bg-background text-on-surface overflow-hidden">
-      {/* Sidebar */}
       <aside className="w-64 shrink-0 flex flex-col border-r border-white/5 bg-[#0d0d0d]">
-        {/* Logo */}
         <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/5">
           <div className="w-7 h-7 rounded-md bg-primary-fixed flex items-center justify-center">
             <span
@@ -367,7 +567,6 @@ export default function ChatPage({
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-4">
-          {/* Back */}
           <button
             onClick={() => router.push("/dashboard")}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-on-surface-variant hover:text-white hover:bg-white/5 transition-all"
@@ -378,7 +577,6 @@ export default function ChatPage({
             Dashboard
           </button>
 
-          {/* Document info */}
           <div className="rounded-xl border border-white/6 bg-white/2 p-3 space-y-2">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
               Document
@@ -423,7 +621,6 @@ export default function ChatPage({
             )}
           </div>
 
-          {/* New chat button */}
           <button
             onClick={startNewChat}
             disabled={isThinking}
@@ -435,7 +632,6 @@ export default function ChatPage({
             New chat
           </button>
 
-          {/* Conversations list */}
           <div className="flex-1 flex flex-col gap-1 min-h-0">
             <p className="px-1 mb-1 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
               History
@@ -490,7 +686,6 @@ export default function ChatPage({
           </div>
         </nav>
 
-        {/* User */}
         <div className="px-4 py-4 border-t border-white/5">
           <div className="flex items-center gap-3">
             {session.user?.image ? (
@@ -529,9 +724,7 @@ export default function ChatPage({
         </div>
       </aside>
 
-      {/* Chat area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <header className="flex items-center justify-between px-8 py-4 border-b border-white/5 shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/8 flex items-center justify-center shrink-0">
@@ -564,7 +757,6 @@ export default function ChatPage({
           </button>
         </header>
 
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto px-8 py-6">
           {messagesLoading ? (
             <div className="max-w-2xl mx-auto space-y-6 pt-4">
@@ -621,7 +813,11 @@ export default function ChatPage({
                     avatarUrl={session.user?.image}
                   />
                 ) : (
-                  <AssistantMessage key={msg.id} content={msg.content} />
+                  <AssistantMessage
+                    key={msg.id}
+                    content={msg.content}
+                    citations={msg.citations}
+                  />
                 ),
               )}
               {isThinking && messages[messages.length - 1]?.content === "" && (
@@ -632,7 +828,6 @@ export default function ChatPage({
           )}
         </div>
 
-        {/* Input */}
         <div className="px-8 py-5 border-t border-white/5 shrink-0">
           <div className="max-w-2xl mx-auto">
             <div className="flex items-end gap-3 px-4 py-3 rounded-2xl border border-white/10 bg-surface-container-low focus-within:border-primary-fixed/40 transition-colors">

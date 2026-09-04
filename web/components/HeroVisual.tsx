@@ -33,7 +33,6 @@ export default function HeroVisual() {
 
   return (
     <div className="mt-24 max-w-6xl mx-auto" style={{ perspective: "1200px" }}>
-      {/* Ambient glow behind */}
       <div
         className="absolute -inset-8 blur-3xl transition-opacity duration-700 pointer-events-none"
         style={{
@@ -42,7 +41,6 @@ export default function HeroVisual() {
         }}
       />
 
-      {/* 3D card */}
       <div
         ref={cardRef}
         onMouseMove={onMouseMove}
@@ -58,22 +56,18 @@ export default function HeroVisual() {
           willChange: "transform",
         }}
       >
-        {/* Card frame */}
         <div
           className="rounded-2xl border border-outline-variant/30 bg-surface-container-lowest overflow-hidden aspect-video shadow-2xl"
           style={{ transformStyle: "preserve-3d" }}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             alt="Cortex Interface"
             className="w-full h-full object-cover"
             src={IMG_SRC}
           />
 
-          {/* Gradient overlay bottom */}
           <div className="absolute inset-0 bg-linear-to-t from-surface-container-lowest via-transparent to-transparent" />
 
-          {/* Dynamic specular highlight that moves with mouse */}
           <div
             className="absolute inset-0 pointer-events-none transition-opacity duration-300"
             style={{
@@ -82,11 +76,9 @@ export default function HeroVisual() {
             }}
           />
 
-          {/* Top edge shine */}
           <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-white/20 to-transparent" />
         </div>
 
-        {/* Floating shadow beneath */}
         <div
           className="absolute -bottom-6 left-8 right-8 h-12 blur-2xl rounded-full pointer-events-none transition-all duration-500"
           style={{

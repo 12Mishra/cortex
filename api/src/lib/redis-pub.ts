@@ -1,6 +1,5 @@
 import { Redis } from "ioredis";
 
-// Separate connection – pub/sub requires a dedicated client
 const publisher = new Redis(process.env.REDIS_URL ?? "redis://localhost:6379", {
   maxRetriesPerRequest: null,
 });
@@ -16,7 +15,7 @@ export type ProcessingStep =
 
 export interface ProgressEvent {
   step: ProcessingStep;
-  progress: number; // 0-100
+  progress: number;
   message: string;
   done?: boolean;
   error?: boolean;
