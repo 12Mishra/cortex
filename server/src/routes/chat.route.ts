@@ -3,6 +3,8 @@ import { GoogleGenAI } from "@google/genai";
 import { prisma } from "../lib/prisma";
 import { generateQueryEmbedding } from "../lib/embed";
 import { hybridSearch } from "../lib/retrieval";
+import { getFileFromS3 } from "../lib/download-file";
+import { streamToBuffer } from "../lib/buffer";
 
 export const chatRouter = express.Router();
 
@@ -98,6 +100,19 @@ chatRouter.post("/", async (req, res) => {
 
     console.log(`[chat] context: ${chunks.length} chunks, ~${contextText.length} chars`);
 
+    const pictures = await prisma.documentPicture.findMany({
+      where: { documentId, chunkId: { in: chunks.map((chunk) => chunk.id) } },
+      take: 4,
+    });
+    const userParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [{
+      text: `Context from the document:\n\n${contextText}\n\nQuestion: ${query.trim()}`,
+    }];
+    for (const picture of pictures) {
+      const bytes = await streamToBuffer(await getFileFromS3(picture.s3Key));
+      userParts.push({ text: `Document picture on page ${picture.pageNumber ?? "unknown"}:` });
+      userParts.push({ inlineData: { mimeType: picture.mimeType, data: bytes.toString("base64") } });
+    }
+
     const contents = [
       ...history.map((m) => ({
         role: m.role === "assistant" ? "model" : "user",
@@ -105,11 +120,7 @@ chatRouter.post("/", async (req, res) => {
       })),
       {
         role: "user",
-        parts: [
-          {
-            text: `Context from the document:\n\n${contextText}\n\nQuestion: ${query.trim()}`,
-          },
-        ],
+        parts: userParts,
       },
     ];
 

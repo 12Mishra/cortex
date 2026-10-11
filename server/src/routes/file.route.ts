@@ -46,42 +46,57 @@ fileRouter.post("/process", async (req, res) => {
 
 fileRouter.get("/status/:fileId", async (req, res) => {
   const { fileId } = req.params;
-
-  const doc = await prisma.document.findUnique({
-    where: { id: fileId },
-    select: { status: true },
-  });
-
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
   const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-
-  if (doc?.status === "ready") {
-    send({ step: "done", progress: 100, message: "Document is ready!", done: true });
-    return res.end();
-  }
-  if (doc?.status === "failed") {
-    send({ step: "failed", progress: 0, message: doc.status, error: true });
-    return res.end();
-  }
-
   const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 15_000);
-
-  const unsubscribe = subscribeToFileProgress(fileId, (raw) => {
-    send(JSON.parse(raw));
-    const parsed = JSON.parse(raw);
-    if (parsed.done || parsed.error) {
-      clearInterval(heartbeat);
-      unsubscribe();
-      res.end();
-    }
-  });
-
-  req.on("close", () => {
+  let unsubscribe: (() => void) | undefined;
+  let closed = false;
+  const cleanup = () => {
+    if (closed) return;
+    closed = true;
     clearInterval(heartbeat);
-    unsubscribe();
-  });
+    unsubscribe?.();
+  };
+  const finish = (event: object) => {
+    if (closed) return;
+    send(event);
+    cleanup();
+    res.end();
+  };
+  res.on("close", cleanup);
+
+  try {
+    unsubscribe = await subscribeToFileProgress(fileId, (raw) => {
+      if (closed) return;
+      const event = JSON.parse(raw);
+      if (event.done || event.error) finish(event);
+      else send(event);
+    });
+    if (closed) {
+      unsubscribe();
+      return;
+    }
+
+    // Subscribe first, then read the durable status. This covers terminal events
+    // published before the browser opened (or reconnected to) the stream.
+    const doc = await prisma.document.findUnique({
+      where: { id: fileId },
+      select: { status: true, errorMessage: true },
+    });
+    if (closed) return;
+    if (doc?.status === "ready") {
+      finish({ step: "done", progress: 100, message: "Document is ready!", done: true });
+    } else if (doc?.status === "failed") {
+      finish({ step: "failed", progress: 0, message: doc.errorMessage ?? "Processing failed", error: true });
+    } else if (!doc) {
+      finish({ step: "failed", progress: 0, message: "Document not found", error: true });
+    }
+  } catch (error) {
+    console.error(`[status] Could not subscribe to ${fileId}:`, error);
+    finish({ step: "failed", progress: 0, message: "Could not read processing status", error: true });
+  }
 });

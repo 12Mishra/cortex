@@ -12,15 +12,20 @@ subscriber.on("message", (channel, message) => {
 });
 
 
-export function subscribeToFileProgress(
+export async function subscribeToFileProgress(
   fileId: string,
   onMessage: Listener,
-): () => void {
+): Promise<() => void> {
   const channel = `file-progress:${fileId}`;
 
   if (!listeners.has(channel)) {
     listeners.set(channel, new Set());
-    subscriber.subscribe(channel);
+    try {
+      await subscriber.subscribe(channel);
+    } catch (error) {
+      listeners.delete(channel);
+      throw error;
+    }
   }
 
   listeners.get(channel)!.add(onMessage);

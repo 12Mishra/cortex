@@ -38,14 +38,20 @@ interface Doc {
 
 function processingErrorMessage(error: string | null): string {
   if (!error) return "Processing failed. Please try again.";
+  if (/Embedding model changed to Jina/i.test(error)) {
+    return "This document needs new Jina embeddings. Retry processing to rebuild its index.";
+  }
   if (/monthly spending cap/i.test(error)) {
-    return "The embedding service reached its monthly spending cap. Increase the cap in Google AI Studio, then retry.";
+    return "The previous Gemini embedding request reached its monthly spending cap. Retry with Jina.";
   }
   if (/prepayment credits are depleted/i.test(error)) {
     return "The embedding service has no prepaid credits left. Add credits in Google AI Studio, then retry.";
   }
   if (/RESOURCE_EXHAUSTED|rate limit|too many requests/i.test(error)) {
     return "The embedding service is temporarily at capacity. Retry shortly.";
+  }
+  if (/INSUFFICIENT_BALANCE|insufficient balance|credits/i.test(error)) {
+    return "The Jina account needs available credits before this document can be processed.";
   }
   if (/PDF contains no extractable text/i.test(error)) {
     return "This PDF has no extractable text. Upload a text-based PDF and try again.";
@@ -714,7 +720,10 @@ export default function DashboardPage() {
         }
       };
 
-      es.onerror = () => es.close();
+      es.onerror = () => {
+        es.close();
+        void fetchDocs();
+      };
 
       return es;
     });

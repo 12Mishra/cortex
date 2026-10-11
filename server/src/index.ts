@@ -4,7 +4,7 @@ import express from "express";
 import { fileRouter } from "./routes/file.route.ts";
 import { chatRouter } from "./routes/chat.route.ts";
 import cors from "cors";
-import { rateLimit } from "express-rate-limit";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;

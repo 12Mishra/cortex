@@ -1,13 +1,31 @@
 import { prisma } from "./prisma";
 
-const SIMILARITY_FLOOR = 0.5;
 const VECTOR_LIMIT = 10;
 const KEYWORD_LIMIT = 10;
 const TOP_K = 6;
 const RRF_K = 60;
+const MAX_KEYWORD_TERMS = 24;
 
+// Candidate generation needs to match a chunk covering any part of a broad
+// question. PostgreSQL's plainto_tsquery joins all terms with AND, which can
+// exclude every section of a multi-part document question.
+const QUERY_STOP_WORDS = new Set([
+  "a", "about", "an", "and", "are", "as", "at", "be", "by", "can",
+  "describe", "described", "distinguish", "do", "does", "document", "for",
+  "from", "how", "in", "is", "it", "its", "many", "mention", "mentions",
+  "multiple", "of", "on", "or", "our", "the", "their", "these", "this",
+  "to", "what", "when", "where", "which", "who", "with",
+]);
 
-interface RawChunk {
+export function buildKeywordQuery(query: string): string {
+  const terms = Array.from(new Set(
+    (query.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])
+      .filter((word) => (word.length >= 3 || word === "ai") && !QUERY_STOP_WORDS.has(word)),
+  ));
+  return terms.slice(0, MAX_KEYWORD_TERMS).join(" | ");
+}
+
+export interface RawChunk {
   id: string;
   content: string;
   chunkIndex: number;
@@ -31,6 +49,7 @@ export async function hybridSearch(
   documentId: string,
 ): Promise<RetrievedChunk[]> {
   const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+  const keywordQuery = buildKeywordQuery(query);
 
   const [vectorChunks, keywordChunks] = await Promise.all([
     prisma.$queryRawUnsafe<RawChunk[]>(
@@ -38,25 +57,23 @@ export async function hybridSearch(
               1 - (embedding <=> $1::vector) AS score
        FROM "DocumentChunk"
        WHERE "documentId" = $2
-         AND 1 - (embedding <=> $1::vector) > $3
        ORDER BY score DESC
        LIMIT ${VECTOR_LIMIT}`,
       vectorLiteral,
       documentId,
-      SIMILARITY_FLOOR,
     ),
 
-    prisma.$queryRawUnsafe<RawChunk[]>(
+    keywordQuery ? prisma.$queryRawUnsafe<RawChunk[]>(
       `SELECT id, content, "chunkIndex", "pageNumber",
-              ts_rank(to_tsvector('english', content), plainto_tsquery('english', $1)) AS score
+              ts_rank_cd(to_tsvector('english', content), to_tsquery('english', $1)) AS score
        FROM "DocumentChunk"
        WHERE "documentId" = $2
-         AND to_tsvector('english', content) @@ plainto_tsquery('english', $1)
+         AND to_tsvector('english', content) @@ to_tsquery('english', $1)
        ORDER BY score DESC
        LIMIT ${KEYWORD_LIMIT}`,
-      query,
+      keywordQuery,
       documentId,
-    ),
+    ) : Promise.resolve([]),
   ]);
 
   console.log(
@@ -84,7 +101,7 @@ export async function hybridSearch(
   return mergeWithRRF(vectorChunks, keywordChunks);
 }
 
-function mergeWithRRF(
+export function mergeWithRRF(
   vectorChunks: RawChunk[],
   keywordChunks: RawChunk[],
 ): RetrievedChunk[] {

@@ -33,6 +33,7 @@ model Document {
   createdAt     DateTime        @default(now())
   processedAt   DateTime?
   chunks        DocumentChunk[]
+  pictures      DocumentPicture[]
   conversations Conversation[]
 }
 
@@ -46,8 +47,24 @@ model DocumentChunk {
   embedding  Unsupported("vector(768)")?
   tokenCount Int?
   createdAt  DateTime                    @default(now())
+  pictures   DocumentPicture[]
 
   @@index([documentId])
+}
+
+model DocumentPicture {
+  id         String         @id @default(uuid())
+  documentId String
+  document   Document       @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkId    String?
+  chunk      DocumentChunk? @relation(fields: [chunkId], references: [id], onDelete: SetNull)
+  doclingRef String
+  pageNumber Int?
+  s3Key      String
+  mimeType   String
+
+  @@unique([documentId, doclingRef])
+  @@index([chunkId])
 }
 
 model Conversation {

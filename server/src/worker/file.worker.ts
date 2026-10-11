@@ -1,13 +1,14 @@
 import "dotenv/config";
 import { Queue, Worker, type Job } from "bullmq";
 import crypto from "crypto";
-import pdfParse from "pdf-parse";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { redisConnection } from "../config/redis";
 import type { FileRecord } from "../types/file";
 import { getFileFromS3 } from "../lib/download-file";
 import { streamToBuffer } from "../lib/buffer";
 import { prisma } from "../lib/prisma";
-import { chunkPageTexts } from "../lib/chunk";
+import { chunkPdfWithDocling } from "../lib/docling";
+import { s3 } from "../config/s3";
 import { generateEmbeddings } from "../lib/embed";
 import { publishProgress } from "../lib/redis-pub";
 
@@ -58,49 +59,20 @@ async function processFileJob(job: Job<{ file: FileRecord }>) {
       await publishProgress(fileId, {
         step: "extracting",
         progress: 25,
-        message: "Extracting text from PDF…",
+        message: "Reading document structure with Docling…",
       });
-
-      const pageTexts: { pageNumber: number; text: string }[] = [];
-
-      await pdfParse(buffer, {
-        pagerender: (pageData: any): Promise<string> =>
-          pageData.getTextContent().then((tc: any) => {
-            const text: string = tc.items
-              .map((item: any) => (typeof item.str === "string" ? item.str : ""))
-              .join(" ");
-            pageTexts.push({ pageNumber: pageData.pageIndex + 1, text });
-            return text;
-          }),
-      });
-
-      const totalText = pageTexts.map((p) => p.text).join("").trim();
-      console.log(
-        `[worker] Extracted ${totalText.length} chars across ${pageTexts.length} pages`,
-      );
-
-      if (!totalText) {
-        await prisma.document.update({
-          where: { id: fileId },
-          data: { status: "failed", errorMessage: "PDF contains no extractable text" },
-        });
-        await publishProgress(fileId, {
-          step: "failed",
-          progress: 0,
-          message: "PDF contains no extractable text",
-          error: true,
-        });
-        return;
+      const doclingStartedAt = Date.now();
+      const { chunks: pageChunks, pictures } = await chunkPdfWithDocling(buffer, file.fileName);
+      if (!pageChunks.length) {
+        throw new Error("Docling found no indexable content");
       }
 
       await publishProgress(fileId, {
         step: "chunking",
         progress: 40,
-        message: "Splitting text into chunks…",
+        message: "Preparing structured chunks and pictures…",
       });
-
-      const pageChunks = chunkPageTexts(pageTexts);
-      console.log(`[worker] ${pageChunks.length} chunks created across ${pageTexts.length} pages`);
+      console.log(`[worker] Docling returned ${pageChunks.length} chunks and ${pictures.length} pictures in ${((Date.now() - doclingStartedAt) / 1000).toFixed(1)}s`);
 
       const BATCH_SIZE = 10;
       const totalBatches = Math.ceil(pageChunks.length / BATCH_SIZE);
@@ -108,15 +80,13 @@ async function processFileJob(job: Job<{ file: FileRecord }>) {
 
       for (let b = 0; b < totalBatches; b++) {
         const batch = pageChunks.slice(b * BATCH_SIZE, (b + 1) * BATCH_SIZE);
-        const batchEmbeddings = await generateEmbeddings(batch.map((c) => c.content));
-        allEmbeddings.push(...batchEmbeddings);
-
-        const progress = 40 + Math.floor(((b + 1) / totalBatches) * 45);
         await publishProgress(fileId, {
           step: "embedding",
-          progress,
+          progress: 40 + Math.floor((b / totalBatches) * 45),
           message: `Generating embeddings… batch ${b + 1}/${totalBatches}`,
         });
+        const batchEmbeddings = await generateEmbeddings(batch.map((c) => c.content));
+        allEmbeddings.push(...batchEmbeddings);
       }
 
       console.log(`[worker] Embeddings ready for ${pageChunks.length} chunks`);
@@ -126,28 +96,51 @@ async function processFileJob(job: Job<{ file: FileRecord }>) {
         message: "Storing chunks in vector database…",
       });
 
-      await prisma.documentChunk.deleteMany({ where: { documentId: fileId } });
-
-      for (let i = 0; i < pageChunks.length; i++) {
-        const { content, pageNumber, chunkIndex } = pageChunks[i];
-        const id = crypto.randomUUID();
-        const vectorLiteral = `[${allEmbeddings[i].join(",")}]`;
-        const tokenCount = Math.ceil(content.length / 4);
-
-        await prisma.$executeRaw`
-          INSERT INTO "DocumentChunk" (id, "documentId", "chunkIndex", "pageNumber", content, embedding, "tokenCount", "createdAt")
-          VALUES (
-            ${id}::uuid,
-            ${fileId}::uuid,
-            ${chunkIndex},
-            ${pageNumber},
-            ${content},
-            ${vectorLiteral}::vector,
-            ${tokenCount},
-            NOW()
-          )
-        `;
+      const pictureKeys = new Map<string, string>();
+      for (let i = 0; i < pictures.length; i++) {
+        const picture = pictures[i];
+        const extension = picture.mimeType === "image/jpeg" ? "jpg" : picture.mimeType.split("/")[1];
+        const key = `pictures/${file.userId}/${fileId}/${i}.${extension}`;
+        await s3.send(new PutObjectCommand({
+          Bucket: process.env.AWS_S3_BUCKET_NAME!,
+          Key: key,
+          Body: picture.bytes,
+          ContentType: picture.mimeType,
+        }));
+        pictureKeys.set(picture.ref, key);
       }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.documentPicture.deleteMany({ where: { documentId: fileId } });
+        await tx.documentChunk.deleteMany({ where: { documentId: fileId } });
+        const chunkIds = new Map<string, string>();
+        const pageIds = new Map<number, string>();
+
+        for (let i = 0; i < pageChunks.length; i++) {
+          const { content, pageNumber, chunkIndex, tokenCount, docItems } = pageChunks[i];
+          const id = crypto.randomUUID();
+          const vectorLiteral = `[${allEmbeddings[i].join(",")}]`;
+          await tx.$executeRaw`
+            INSERT INTO "DocumentChunk" (id, "documentId", "chunkIndex", "pageNumber", content, embedding, "tokenCount", "createdAt")
+            VALUES (${id}::uuid, ${fileId}::uuid, ${chunkIndex}, ${pageNumber}, ${content}, ${vectorLiteral}::vector, ${tokenCount ?? Math.ceil(content.length / 4)}, NOW())
+          `;
+          for (const ref of docItems) chunkIds.set(ref, id);
+          if (pageNumber != null && !pageIds.has(pageNumber)) pageIds.set(pageNumber, id);
+        }
+
+        for (const picture of pictures) {
+          await tx.documentPicture.create({
+            data: {
+              documentId: fileId,
+              chunkId: chunkIds.get(picture.ref) ?? (picture.pageNumber != null ? pageIds.get(picture.pageNumber) : undefined),
+              doclingRef: picture.ref,
+              pageNumber: picture.pageNumber,
+              s3Key: pictureKeys.get(picture.ref)!,
+              mimeType: picture.mimeType,
+            },
+          });
+        }
+      }, { timeout: 120_000 });
 
       console.log(`[worker] Stored ${pageChunks.length} chunks`);
 
@@ -178,6 +171,7 @@ async function processFileJob(job: Job<{ file: FileRecord }>) {
         message,
         error: true,
       }).catch(() => {});
+      throw err;
     }
 }
 
