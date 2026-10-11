@@ -19,10 +19,12 @@ function readPositiveInteger(value: string | undefined, fallback: number) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const MIN_WORKERS = readPositiveInteger(process.env.FILE_WORKER_MIN, 3);
+// Process uploads one at a time by default so a batch does not burst the
+// embedding API. Deployments with a higher quota can opt into more workers.
+const MIN_WORKERS = readPositiveInteger(process.env.FILE_WORKER_MIN, 1);
 const MAX_WORKERS = Math.max(
   MIN_WORKERS,
-  readPositiveInteger(process.env.FILE_WORKER_MAX, 10),
+  readPositiveInteger(process.env.FILE_WORKER_MAX, 1),
 );
 const SCALE_INTERVAL_MS = readPositiveInteger(process.env.FILE_WORKER_SCALE_INTERVAL_MS, 5_000);
 

@@ -36,6 +36,30 @@ interface Doc {
   processedAt: string | null;
 }
 
+function processingErrorMessage(error: string | null): string {
+  if (!error) return "Processing failed. Please try again.";
+  if (/monthly spending cap/i.test(error)) {
+    return "The embedding service reached its monthly spending cap. Increase the cap in Google AI Studio, then retry.";
+  }
+  if (/prepayment credits are depleted/i.test(error)) {
+    return "The embedding service has no prepaid credits left. Add credits in Google AI Studio, then retry.";
+  }
+  if (/RESOURCE_EXHAUSTED|rate limit|too many requests/i.test(error)) {
+    return "The embedding service is temporarily at capacity. Retry shortly.";
+  }
+  if (/PDF contains no extractable text/i.test(error)) {
+    return "This PDF has no extractable text. Upload a text-based PDF and try again.";
+  }
+  return "Processing failed. Please try again or check the worker logs.";
+}
+
+function isQuotaFailure(doc: Doc): boolean {
+  return doc.status === "failed" &&
+    /monthly spending cap|prepayment credits are depleted|RESOURCE_EXHAUSTED/i.test(
+      doc.errorMessage ?? "",
+    );
+}
+
 function StatusBadge({
   status,
   step,
@@ -94,6 +118,7 @@ interface FileEntry {
   progress: number;
   error?: string;
   documentId?: string;
+  processingStarted?: boolean;
 }
 
 function UploadModal({
@@ -109,6 +134,7 @@ function UploadModal({
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [guideOpen, setGuideOpen] = useState(false);
   const [uploadDone, setUploadDone] = useState(false);
+  const [processingError, setProcessingError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const addFiles = (incoming: File[]) => {
@@ -236,27 +262,40 @@ function UploadModal({
   const [isProcessing, setIsProcessing] = useState(false);
 
   const handleStartProcessing = async () => {
-    const docIds = entries
-      .filter((e) => e.state === "done" && e.documentId)
-      .map((e) => e.documentId!);
+    const pending = entries
+      .map((entry, index) => ({ entry, index }))
+      .filter(({ entry }) => entry.state === "done" && entry.documentId && !entry.processingStarted);
 
-    if (docIds.length === 0) return;
+    if (pending.length === 0) return;
 
     setIsProcessing(true);
+    setProcessingError(null);
+    const startedIds: string[] = [];
+    let failed = false;
     try {
-      await Promise.all(
-        docIds.map((id) =>
-          fetch(`/api/file/process`, {
+      for (const { entry, index } of pending) {
+        try {
+          const response = await fetch("/api/file/process", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ fileId: id }),
-          }),
-        ),
-      );
-      onProcessingStarted?.(docIds);
+            body: JSON.stringify({ fileId: entry.documentId }),
+          });
+          if (!response.ok) throw new Error("Could not start processing. Please retry.");
+          startedIds.push(entry.documentId!);
+          setEntryState(index, { processingStarted: true, error: undefined });
+        } catch {
+          failed = true;
+          setEntryState(index, { error: "Could not start processing. Please retry." });
+        }
+      }
+      if (startedIds.length > 0) onProcessingStarted?.(startedIds);
+      if (failed) {
+        setProcessingError("Some documents could not be queued. Retry to start the remaining files.");
+      } else {
+        onClose();
+      }
     } finally {
       setIsProcessing(false);
-      onClose();
     }
   };
 
@@ -270,7 +309,7 @@ function UploadModal({
         backgroundColor: "rgba(0,0,0,0.7)",
         backdropFilter: "blur(4px)",
       }}
-      onClick={(e) => e.target === e.currentTarget && !isUploading && onClose()}
+      onClick={(e) => e.target === e.currentTarget && !isUploading && !isProcessing && onClose()}
     >
       <div
         className="relative w-full max-w-lg rounded-2xl border border-white/8 flex flex-col"
@@ -292,7 +331,7 @@ function UploadModal({
           </div>
           <button
             onClick={onClose}
-            disabled={isUploading}
+            disabled={isUploading || isProcessing}
             className="ml-4 w-8 h-8 flex items-center justify-center rounded-lg text-on-surface-variant hover:text-white hover:bg-white/8 disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
           >
             <span
@@ -437,7 +476,7 @@ function UploadModal({
                     />
                   </div>
                 )}
-                {state === "error" && (
+                {error && (
                   <p className="text-[11px] text-red-400">{error}</p>
                 )}
               </div>
@@ -485,9 +524,14 @@ function UploadModal({
         </div>
 
         <div className="flex items-center justify-end gap-3 p-6 pt-5">
+          {processingError && (
+            <p role="alert" className="mr-auto text-xs text-red-400">
+              {processingError}
+            </p>
+          )}
           <button
             onClick={onClose}
-            disabled={isUploading}
+            disabled={isUploading || isProcessing}
             className="px-5 py-2.5 rounded-xl text-sm font-semibold text-on-surface-variant hover:text-white border border-white/8 hover:border-white/15 hover:bg-white/5 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             Cancel
@@ -557,6 +601,8 @@ export default function DashboardPage() {
     Record<string, string>
   >({});
   const [recentChats, setRecentChats] = useState<Conversation[]>([]);
+  const [retryError, setRetryError] = useState<string | null>(null);
+  const [retryingIds, setRetryingIds] = useState<string[]>([]);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -576,15 +622,45 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const queueProcessing = async (docId: string): Promise<boolean> => {
+    setRetryingIds((prev) => [...prev, docId]);
+    try {
+      const response = await fetch("/api/file/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileId: docId }),
+      });
+      if (!response.ok) throw new Error("Could not queue this document for processing.");
+      setDocs((prev) =>
+        prev.map((d) =>
+          d.id === docId ? { ...d, status: "processing", errorMessage: null } : d,
+        ),
+      );
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setRetryingIds((prev) => prev.filter((id) => id !== docId));
+    }
+  };
+
   const handleReprocess = async (docId: string) => {
-    await fetch("/api/file/process", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fileId: docId }),
-    });
-    setDocs((prev) =>
-      prev.map((d) => (d.id === docId ? { ...d, status: "processing" } : d)),
-    );
+    setRetryError(null);
+    if (!(await queueProcessing(docId))) {
+      setRetryError("Could not start processing. Please try again.");
+    }
+  };
+
+  const handleRetryFailed = async () => {
+    setRetryError(null);
+    const failedIds = docs.filter(isQuotaFailure).map((doc) => doc.id);
+    let failedToQueue = 0;
+    for (const id of failedIds) {
+      if (!(await queueProcessing(id))) failedToQueue += 1;
+    }
+    if (failedToQueue > 0) {
+      setRetryError(`${failedToQueue} document${failedToQueue === 1 ? "" : "s"} could not be queued. Please retry.`);
+    }
   };
 
   useEffect(() => {
@@ -622,7 +698,11 @@ export default function DashboardPage() {
           fetchDocs();
         } else if (event.error) {
           setDocs((prev) =>
-            prev.map((d) => (d.id === doc.id ? { ...d, status: "failed" } : d)),
+            prev.map((d) =>
+              d.id === doc.id
+                ? { ...d, status: "failed", errorMessage: event.message }
+                : d,
+            ),
           );
           setProcessingSteps((prev) => {
             const next = { ...prev };
@@ -630,6 +710,7 @@ export default function DashboardPage() {
             return next;
           });
           es.close();
+          fetchDocs();
         }
       };
 
@@ -841,7 +922,7 @@ export default function DashboardPage() {
               Knowledge Base
             </h1>
             <p className="text-sm text-on-surface-variant mt-0.5">
-              {docs.length} documents · {readyCount + uploadedCount} processed
+              {docs.length} documents · {readyCount} ready to chat
             </p>
           </div>
           <button
@@ -859,6 +940,11 @@ export default function DashboardPage() {
         </header>
 
         <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8">
+          {retryError && (
+            <p role="alert" className="rounded-lg border border-error/20 bg-error/10 px-4 py-3 text-sm text-error">
+              {retryError}
+            </p>
+          )}
           <button
             onClick={() => setShowUpload(true)}
             className="w-full rounded-xl border-2 border-dashed border-white/10 hover:border-primary-fixed/40 hover:bg-primary-fixed/4 py-10 flex flex-col items-center gap-3 transition-all duration-200 group"
@@ -915,9 +1001,20 @@ export default function DashboardPage() {
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant/50 mb-3">
-              All Documents
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-on-surface-variant/50">
+                All Documents
+              </p>
+              {docs.some(isQuotaFailure) && (
+                <button
+                  onClick={handleRetryFailed}
+                  disabled={retryingIds.length > 0}
+                  className="text-xs font-semibold text-primary-fixed hover:underline disabled:opacity-40"
+                >
+                  Retry quota failures
+                </button>
+              )}
+            </div>
             {docsLoading ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
@@ -991,6 +1088,16 @@ export default function DashboardPage() {
                         onReprocess={() => handleReprocess(doc.id)}
                       />
 
+                      {doc.status === "failed" && (
+                        <button
+                          onClick={() => handleReprocess(doc.id)}
+                          disabled={retryingIds.includes(doc.id)}
+                          className="px-3 py-2 rounded-lg border border-white/10 bg-white/3 hover:bg-white/8 text-xs font-semibold text-white disabled:opacity-40"
+                        >
+                          {retryingIds.includes(doc.id) ? "Queuing…" : "Retry"}
+                        </button>
+                      )}
+
                       {doc.status === "ready" && (
                         <button
                           onClick={() => router.push(`/chat/${doc.id}`)}
@@ -1009,6 +1116,12 @@ export default function DashboardPage() {
                         </button>
                       )}
                     </div>
+
+                    {doc.status === "failed" && (
+                      <p className="pl-14 text-xs text-error" role="status">
+                        {processingErrorMessage(doc.errorMessage)}
+                      </p>
+                    )}
 
                     {doc.status === "processing" && (
                       <div className="flex flex-col gap-1">

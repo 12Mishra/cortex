@@ -8,13 +8,38 @@ export const fileRouter = express.Router();
 fileRouter.post("/process", async (req, res) => {
   const { fileId } = req.body;
 
+  if (typeof fileId !== "string" || !fileId) {
+    return res.status(400).json({ success: false, message: "Missing file ID" });
+  }
+
   const file = await prisma.document.findUnique({ where: { id: fileId } });
 
   if (!file) {
     return res.status(404).json({ success: false, message: "Document not found" });
   }
 
-  await fileQueue.add("process-file-job", { file });
+  if (file.status === "ready" || file.status === "processing") {
+    return res.status(200).json({ success: true, message: "Document is already processing or ready" });
+  }
+
+  const claimed = await prisma.document.updateMany({
+    where: { id: fileId, status: file.status },
+    data: { status: "processing", errorMessage: null },
+  });
+
+  if (claimed.count === 0) {
+    return res.status(200).json({ success: true, message: "Document is already queued" });
+  }
+
+  try {
+    await fileQueue.add("process-file-job", { file });
+  } catch (error) {
+    await prisma.document.updateMany({
+      where: { id: fileId, status: "processing" },
+      data: { status: file.status, errorMessage: file.errorMessage },
+    });
+    throw error;
+  }
 
   return res.status(200).json({ success: true, message: "Processing started" });
 });
