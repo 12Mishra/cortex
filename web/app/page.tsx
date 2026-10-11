@@ -79,9 +79,9 @@ export default function Home() {
             </h1>
 
             <p className="text-xl text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
-              Ask anything. From any document. From any codebase. Cortex reads,
-              indexes, and reasons over everything you feed it — so you never
-              dig through files again.
+              Ask anything from your documents. Cortex reads, indexes, and
+              reasons over what you upload — so you never dig through files
+              again.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
@@ -132,7 +132,7 @@ export default function Home() {
               not just search.
             </h2>
             <p className="mt-4 text-on-surface-variant text-lg">
-              Four core engines. One unified intelligence layer.
+              Three core engines. One unified intelligence layer.
             </p>
           </ScrollReveal>
 
@@ -184,43 +184,6 @@ export default function Home() {
                       Efficiency gains of 47% identified in section 3.2 — cited
                       from page 14.
                     </span>
-                  </div>
-                </div>
-              </div>
-            </ScrollReveal>
-
-            <ScrollReveal delay={80} className="md:col-span-4">
-              <div className="h-full bg-surface-container-lowest p-10 rounded-xl border border-outline-variant/10 hover:border-primary-fixed/20 transition-all duration-300 flex flex-col">
-                <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center mb-6 border border-secondary/20">
-                  <span
-                    className="material-symbols-outlined text-secondary"
-                    style={{ fontVariationSettings: "'FILL' 1" }}
-                  >
-                    code
-                  </span>
-                </div>
-                <h3 className="text-xl font-bold text-white mb-3">
-                  Codebase Awareness
-                </h3>
-                <p className="text-on-surface-variant text-sm leading-relaxed">
-                  Connect your GitHub and ask Cortex about your architecture,
-                  functions, and decisions. It reads code the way a senior
-                  engineer would.
-                </p>
-                <div className="mt-auto pt-6 rounded-xl bg-black/50 border border-white/5 p-4 font-mono text-[11px] overflow-hidden">
-                  <div className="text-on-surface-variant/40 mb-2">
-                    {"// auth/middleware.ts"}
-                  </div>
-                  <div>
-                    <span className="text-secondary/70">function </span>
-                    <span className="text-white">verifyToken</span>
-                    <span className="text-on-surface-variant/50">
-                      (token: string)
-                    </span>
-                  </div>
-                  <div className="mt-3 pt-2 border-t border-white/5 text-[10px] text-primary-fixed/80 leading-relaxed">
-                    ↳ Handles JWT verification and attaches user context to
-                    req.user before routing.
                   </div>
                 </div>
               </div>
@@ -290,7 +253,7 @@ export default function Home() {
                   </div>
                   {[
                     { name: "annual_report.pdf", pct: 100, done: true },
-                    { name: "codebase.zip", pct: 85, done: false },
+                    { name: "project_notes.pdf", pct: 85, done: false },
                     { name: "docs/", pct: 43, done: false },
                   ].map(({ name, pct, done }) => (
                     <div key={name} className="mb-3">

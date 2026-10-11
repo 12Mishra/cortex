@@ -548,9 +548,9 @@ export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [showUpload, setShowUpload] = useState(false);
-  const [activePage, setActivePage] = useState<
-    "dashboard" | "documents" | "repositories"
-  >("dashboard");
+  const [activePage, setActivePage] = useState<"dashboard" | "documents">(
+    "dashboard",
+  );
   const [docs, setDocs] = useState<Doc[]>([]);
   const [docsLoading, setDocsLoading] = useState(true);
   const [processingSteps, setProcessingSteps] = useState<
@@ -722,38 +722,26 @@ export default function DashboardPage() {
             <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
               Knowledge
             </p>
-            {(
-              [
-                { id: "documents", icon: "description", label: "Documents" },
-                {
-                  id: "repositories",
-                  icon: "account_tree",
-                  label: "Repositories",
-                },
-              ] as const
-            ).map(({ id, icon, label }) => (
-              <button
-                key={id}
-                onClick={() => setActivePage(id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                  activePage === id
-                    ? "bg-white/8 text-white"
-                    : "text-on-surface-variant hover:bg-white/5 hover:text-white"
-                }`}
+            <button
+              onClick={() => setActivePage("documents")}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                activePage === "documents"
+                  ? "bg-white/8 text-white"
+                  : "text-on-surface-variant hover:bg-white/5 hover:text-white"
+              }`}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  fontSize: "18px",
+                  fontVariationSettings:
+                    activePage === "documents" ? "'FILL' 1" : "'FILL' 0",
+                }}
               >
-                <span
-                  className="material-symbols-outlined"
-                  style={{
-                    fontSize: "18px",
-                    fontVariationSettings:
-                      activePage === id ? "'FILL' 1" : "'FILL' 0",
-                  }}
-                >
-                  {icon}
-                </span>
-                {label}
-              </button>
-            ))}
+                description
+              </span>
+              Documents
+            </button>
           </div>
 
           <div>
