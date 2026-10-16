@@ -2,6 +2,20 @@
 
 Cortex is a document-grounded AI assistant for private PDF knowledge bases. Users sign in with Google, upload PDFs to S3 through presigned URLs, process them asynchronously, and then ask questions against the indexed document. Answers are streamed back to the browser and grounded in retrieved chunks with page-number citations where extraction provides page metadata.
 
+## Continuous Integration
+
+GitHub Actions runs the `.github/workflows/ci.yml` workflow on pushes to `main`,
+pull requests targeting `main`, and manual runs. Separate frontend and backend
+jobs install locked dependencies with Node.js 22, generate their Prisma clients,
+and check TypeScript. The frontend job also runs ESLint.
+
+These checks require no repository secrets or running database. They use a
+placeholder database URL for Prisma configuration and do not run migrations,
+integration evaluations, or deployment. Railway continues to build and deploy
+the application using its existing configuration. After the workflow has been
+pushed and passes, enable **Wait for CI** in Railway's service settings if
+deployments should wait for these checks.
+
 ## Problem Statement
 
 Long PDFs are hard to inspect quickly, and generic chat assistants are not reliable when they answer from memory instead of the source document. Cortex narrows the problem to document-owned retrieval augmented generation:
