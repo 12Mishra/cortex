@@ -38,7 +38,7 @@ export default function Home() {
           </div>
           {session ? (
             <div className="flex items-center gap-3">
-              <a href="/metrics" className="rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-colors">Metrics</a>
+              {/* <a href="/metrics" className="rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-colors">Metrics</a> */}
               {session.user?.image && (
                 <Image
                   src={session.user.image}

@@ -817,7 +817,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <a
+          {/* <a
             href="/metrics"
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-all"
           >
@@ -825,7 +825,7 @@ export default function DashboardPage() {
               query_stats
             </span>
             Evaluation metrics
-          </a>
+          </a> */}
 
           <div>
             <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">

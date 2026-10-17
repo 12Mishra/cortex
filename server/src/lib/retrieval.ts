@@ -1,9 +1,9 @@
 import { prisma } from "./prisma";
 
-const VECTOR_LIMIT = 10;
-const KEYWORD_LIMIT = 10;
-const TOP_K = 6;
-const RRF_K = 60;
+export const VECTOR_LIMIT = 10;
+export const KEYWORD_LIMIT = 10;
+export const TOP_K = 6;
+export const RRF_K = 60;
 const MAX_KEYWORD_TERMS = 24;
 
 // Candidate generation needs to match a chunk covering any part of a broad
@@ -43,43 +43,74 @@ export interface RetrievedChunk {
   hybridScore: number;
 }
 
+export interface SearchTimings {
+  bm25?: number;
+  vector?: number;
+  rrf?: number;
+}
+
+export interface SearchOptions {
+  /** Evaluation keeps score order and can inspect all ten candidates. */
+  evaluation?: boolean;
+  limit?: number;
+  timings?: SearchTimings;
+  quiet?: boolean;
+}
+
+export async function vectorSearch(queryEmbedding: number[], documentId: string, timings?: SearchTimings): Promise<RawChunk[]> {
+  const started = performance.now();
+  const vectorLiteral = `[${queryEmbedding.join(",")}]`;
+  const chunks = await prisma.$queryRawUnsafe<RawChunk[]>(
+    `SELECT id, content, "chunkIndex", "pageNumber",
+            1 - (embedding <=> $1::vector) AS score
+     FROM "DocumentChunk"
+     WHERE "documentId" = $2
+     ORDER BY score DESC
+     LIMIT ${VECTOR_LIMIT}`,
+    vectorLiteral,
+    documentId,
+  );
+  if (timings) timings.vector = performance.now() - started;
+  return chunks;
+}
+
+export async function keywordSearch(query: string, documentId: string, timings?: SearchTimings): Promise<RawChunk[]> {
+  const keywordQuery = buildKeywordQuery(query);
+  if (!keywordQuery) {
+    if (timings) timings.bm25 = 0;
+    return [];
+  }
+  const started = performance.now();
+  const chunks = await prisma.$queryRawUnsafe<RawChunk[]>(
+    `SELECT id, content, "chunkIndex", "pageNumber",
+            ts_rank_cd(to_tsvector('english', content), to_tsquery('english', $1)) AS score
+     FROM "DocumentChunk"
+     WHERE "documentId" = $2
+       AND to_tsvector('english', content) @@ to_tsquery('english', $1)
+     ORDER BY score DESC
+     LIMIT ${KEYWORD_LIMIT}`,
+    keywordQuery,
+    documentId,
+  );
+  if (timings) timings.bm25 = performance.now() - started;
+  return chunks;
+}
+
 export async function hybridSearch(
   query: string,
   queryEmbedding: number[],
   documentId: string,
+  options: SearchOptions = {},
 ): Promise<RetrievedChunk[]> {
-  const vectorLiteral = `[${queryEmbedding.join(",")}]`;
-  const keywordQuery = buildKeywordQuery(query);
-
   const [vectorChunks, keywordChunks] = await Promise.all([
-    prisma.$queryRawUnsafe<RawChunk[]>(
-      `SELECT id, content, "chunkIndex", "pageNumber",
-              1 - (embedding <=> $1::vector) AS score
-       FROM "DocumentChunk"
-       WHERE "documentId" = $2
-       ORDER BY score DESC
-       LIMIT ${VECTOR_LIMIT}`,
-      vectorLiteral,
-      documentId,
-    ),
-
-    keywordQuery ? prisma.$queryRawUnsafe<RawChunk[]>(
-      `SELECT id, content, "chunkIndex", "pageNumber",
-              ts_rank_cd(to_tsvector('english', content), to_tsquery('english', $1)) AS score
-       FROM "DocumentChunk"
-       WHERE "documentId" = $2
-         AND to_tsvector('english', content) @@ to_tsquery('english', $1)
-       ORDER BY score DESC
-       LIMIT ${KEYWORD_LIMIT}`,
-      keywordQuery,
-      documentId,
-    ) : Promise.resolve([]),
+    vectorSearch(queryEmbedding, documentId, options.timings),
+    keywordSearch(query, documentId, options.timings),
   ]);
 
-  console.log(
+  if (!options.evaluation && !options.quiet) console.log(
     `[retrieval] vector=${vectorChunks.length} keyword=${keywordChunks.length}`,
   );
-  console.log(
+  if (!options.evaluation && !options.quiet) console.log(
     "[retrieval] vector results:",
     vectorChunks.map((c) => ({
       idx: c.chunkIndex,
@@ -88,7 +119,7 @@ export async function hybridSearch(
       preview: c.content.substring(0, 70),
     })),
   );
-  console.log(
+  if (!options.evaluation && !options.quiet) console.log(
     "[retrieval] keyword results:",
     keywordChunks.map((c) => ({
       idx: c.chunkIndex,
@@ -98,12 +129,16 @@ export async function hybridSearch(
     })),
   );
 
-  return mergeWithRRF(vectorChunks, keywordChunks);
+  const started = options.timings ? performance.now() : 0;
+  const merged = mergeWithRRF(vectorChunks, keywordChunks, options);
+  if (options.timings) options.timings.rrf = performance.now() - started;
+  return merged;
 }
 
 export function mergeWithRRF(
   vectorChunks: RawChunk[],
   keywordChunks: RawChunk[],
+  options: SearchOptions = {},
 ): RetrievedChunk[] {
   const map = new Map<string, RetrievedChunk>();
 
@@ -140,10 +175,10 @@ export function mergeWithRRF(
 
   const topK = Array.from(map.values())
     .sort((a, b) => b.hybridScore - a.hybridScore)
-    .slice(0, TOP_K)
-    .sort((a, b) => a.chunkIndex - b.chunkIndex);
+    .slice(0, options.evaluation ? (options.limit ?? VECTOR_LIMIT) : TOP_K);
+  if (!options.evaluation) topK.sort((a, b) => a.chunkIndex - b.chunkIndex);
 
-  console.log(
+  if (!options.evaluation && !options.quiet) console.log(
     "[retrieval] final context (doc order):",
     topK.map((c) => ({
       idx: c.chunkIndex,
