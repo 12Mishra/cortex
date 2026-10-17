@@ -27,7 +27,11 @@ export async function POST(
 
     const expressRes = await fetch(`${EXPRESS_API_URL}/file/process`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-Internal-Secret": process.env.INTERNAL_API_SECRET!,
+        "X-User-Id": session.user.id,
+      },
       body: JSON.stringify({ fileId: id }),
     });
 

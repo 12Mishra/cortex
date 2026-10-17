@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import Link from "next/link";
 import dynamic from "next/dynamic";
 const WorkflowVisual = dynamic(() => import("../components/WorkflowVisual"), {
   ssr: false,
@@ -37,6 +38,7 @@ export default function Home() {
           </div>
           {session ? (
             <div className="flex items-center gap-3">
+              <a href="/metrics" className="rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-colors">Metrics</a>
               {session.user?.image && (
                 <Image
                   src={session.user.image}
@@ -51,12 +53,15 @@ export default function Home() {
               </button>
             </div>
           ) : (
-            <a
-              href="/auth"
-              className="bg-primary-fixed text-white px-5 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-all duration-200"
-            >
-              Sign In
-            </a>
+            <div className="flex items-center gap-3">
+              <a href="/metrics" className="rounded-lg px-3 py-2 text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-colors">Metrics</a>
+              <a
+                href="/auth"
+                className="bg-primary-fixed text-white px-5 py-2 rounded-lg font-semibold text-sm hover:opacity-90 transition-all duration-200"
+              >
+                Sign In
+              </a>
+            </div>
           )}
         </div>
       </nav>
@@ -65,6 +70,11 @@ export default function Home() {
         <section className="relative pt-48 pb-40 px-8 overflow-hidden">
           <div className="hero-gradient absolute inset-0 -z-10" />
           <div className="max-w-4xl mx-auto text-center space-y-8">
+            <Link href="/test" className="group flex flex-col sm:flex-row items-center justify-center gap-3 rounded-xl border border-primary-fixed/30 bg-primary-fixed/10 px-5 py-4 text-sm text-white transition-colors hover:bg-primary-fixed/20 focus-visible:outline-2 focus-visible:outline-primary-fixed">
+              <span className="flex items-center gap-2 font-semibold"><span className="h-2 w-2 rounded-full bg-emerald-400" />Test workspace available</span>
+              <span className="text-on-surface-variant">Upload your PDF and try Cortex. No Google sign-in required.</span>
+              <span className="shrink-0 font-semibold">Try it now →</span>
+            </Link>
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-xs text-on-surface-variant tracking-wide">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Now in public beta · Free to get started

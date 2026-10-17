@@ -568,7 +568,7 @@ export default function ChatPage({
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 flex flex-col gap-4">
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push(session.user?.isGuest ? "/test" : "/dashboard")}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-on-surface-variant hover:text-white hover:bg-white/5 transition-all"
           >
             <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
@@ -708,7 +708,7 @@ export default function ChatPage({
                 {session.user?.name ?? "User"}
               </p>
               <p className="text-[11px] text-on-surface-variant truncate">
-                {session.user?.email}
+                {session.user?.isGuest ? "Test mode · 24 hours" : session.user?.email}
               </p>
             </div>
             <button

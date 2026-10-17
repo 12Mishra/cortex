@@ -5,6 +5,17 @@ import { subscribeToFileProgress } from "../lib/redis-sub";
 
 export const fileRouter = express.Router();
 
+// Only the web server may reach processing and progress endpoints. Resolve the
+// owner from its authenticated session, never from a browser-supplied user ID.
+fileRouter.use(async (req, res, next) => {
+  if (!process.env.INTERNAL_API_SECRET || req.headers["x-internal-secret"] !== process.env.INTERNAL_API_SECRET) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const userId = req.headers["x-user-id"];
+  if (typeof userId !== "string" || !userId) return res.status(401).json({ error: "Unauthorized" });
+  next();
+});
+
 fileRouter.post("/process", async (req, res) => {
   const { fileId } = req.body;
 
@@ -12,7 +23,7 @@ fileRouter.post("/process", async (req, res) => {
     return res.status(400).json({ success: false, message: "Missing file ID" });
   }
 
-  const file = await prisma.document.findUnique({ where: { id: fileId } });
+  const file = await prisma.document.findUnique({ where: { id: fileId, userId: req.headers["x-user-id"] as string } });
 
   if (!file) {
     return res.status(404).json({ success: false, message: "Document not found" });
@@ -46,6 +57,11 @@ fileRouter.post("/process", async (req, res) => {
 
 fileRouter.get("/status/:fileId", async (req, res) => {
   const { fileId } = req.params;
+  const owned = await prisma.document.findUnique({
+    where: { id: fileId, userId: req.headers["x-user-id"] as string },
+    select: { id: true },
+  });
+  if (!owned) return res.status(404).json({ error: "Document not found" });
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");

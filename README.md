@@ -40,6 +40,7 @@ Current architecture sketch:
 ## Features
 
 - Google authentication through NextAuth.
+- Public `/test` workspace with anonymous guest sessions and the same dashboard, PDF upload, processing, and chat UI.
 - Authenticated dashboard for per-user document management.
 - Multi-PDF drag-and-drop upload flow.
 - S3 presigned upload URLs so files go directly from browser to object storage.
@@ -56,6 +57,26 @@ Current architecture sketch:
 - Per-user document and conversation filtering on most web-facing routes.
 
 ## Architecture
+
+### Public test workspace
+
+The landing-page banner links to `/test`. Visitors without a session receive a
+unique guest identity through NextAuth's credentials provider; no email entry or
+Google connection is needed. Existing signed-in visitors keep their current
+workspace. Each guest owns their documents and conversations, with the same
+ownership checks as Google users. Reloading keeps the guest session; signing out,
+clearing cookies, or reaching the fixed 24-hour expiry ends access. Uploaded data
+is stored in the existing database and S3; session expiry does not delete it.
+
+The test workspace uses the normal database, S3, Express API, Redis, worker,
+Docling, embedding, and generation services. No database migration or additional
+environment variable is required. Deploy both web and server changes together:
+processing and progress endpoints now require the existing `INTERNAL_API_SECRET`
+and the authenticated user's ID from the web server.
+
+To verify guest isolation against a running local web app, run from `web/`:
+`node --env-file=.env --test tests/guest-workspace.integration.mjs`.
+This creates and removes only synthetic guest fixtures and does not invoke AI.
 
 ```mermaid
 flowchart LR

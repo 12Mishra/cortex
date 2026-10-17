@@ -205,7 +205,10 @@ function UploadModal({
               mimeType: file.type || "application/pdf",
             }),
           });
-          if (!presignRes.ok) throw new Error("Failed to get upload URL");
+          if (!presignRes.ok) {
+            const error = await presignRes.json();
+            throw new Error(error.error ?? "Failed to get upload URL");
+          }
           const { presignedUrl, s3Key } = await presignRes.json();
 
           setEntryState(i, { progress: 30 });
@@ -244,7 +247,10 @@ function UploadModal({
               mimeType: file.type || "application/pdf",
             }),
           });
-          if (!confirmRes.ok) throw new Error("Failed to save document");
+          if (!confirmRes.ok) {
+            const error = await confirmRes.json();
+            throw new Error(error.error ?? "Failed to save document");
+          }
           const { document } = await confirmRes.json();
 
           setEntryState(i, {
@@ -808,6 +814,16 @@ export default function DashboardPage() {
             </button>
           </div>
 
+          <a
+            href="/metrics"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-white/5 hover:text-white transition-all"
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+              query_stats
+            </span>
+            Evaluation metrics
+          </a>
+
           <div>
             <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/50">
               Knowledge
@@ -897,7 +913,7 @@ export default function DashboardPage() {
                   {session.user?.name ?? "User"}
                 </p>
                 <p className="text-[11px] text-on-surface-variant truncate">
-                  {session.user?.email}
+                  {session.user?.isGuest ? "Test mode · 24 hours" : session.user?.email}
                 </p>
               </div>
               <button

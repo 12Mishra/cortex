@@ -2,25 +2,20 @@ import express from "express";
 import { GoogleGenAI } from "@google/genai";
 import { prisma } from "../lib/prisma";
 import { generateQueryEmbedding } from "../lib/embed";
-import { hybridSearch } from "../lib/retrieval";
+import { hybridSearch, type SearchTimings } from "../lib/retrieval";
 import { getFileFromS3 } from "../lib/download-file";
 import { streamToBuffer } from "../lib/buffer";
+import { GENERATION_MODEL, SYSTEM_INSTRUCTION } from "../lib/generation-config";
 
 export const chatRouter = express.Router();
 
 const genai = new GoogleGenAI({});
 
-const GENERATION_MODEL = "gemini-3.1-pro-preview";
 const HISTORY_LIMIT = 10;
-
-const SYSTEM_INSTRUCTION = `You are Cortex, an AI assistant that answers questions strictly based on provided document context.
-Answer only from the context given. If the answer cannot be found in the context, say so clearly.
-Be concise, accurate, and cite relevant details from the context when appropriate.
-When referring to a source, use the bracketed reference numbers provided (e.g. [1], [2]).`;
 
 chatRouter.post("/", async (req, res) => {
   const secret = req.headers["x-internal-secret"];
-  if (secret !== process.env.INTERNAL_API_SECRET) {
+  if (!process.env.INTERNAL_API_SECRET || secret !== process.env.INTERNAL_API_SECRET) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -35,8 +30,16 @@ chatRouter.post("/", async (req, res) => {
     conversationId?: string;
   };
 
-  if (!query?.trim() || !documentId) {
+  if (typeof query !== "string" || !query.trim() || typeof documentId !== "string" || !documentId || (conversationId !== undefined && typeof conversationId !== "string")) {
     return res.status(400).json({ error: "Missing query or documentId" });
+  }
+
+  if (conversationId) {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId, userId, documentId },
+      select: { id: true },
+    });
+    if (!conversation) return res.status(404).json({ error: "Conversation not found" });
   }
 
   res.setHeader("Content-Type", "text/event-stream");
@@ -45,6 +48,9 @@ chatRouter.post("/", async (req, res) => {
   res.flushHeaders();
 
   const send = (data: object) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const measure = req.headers["x-eval-timings"] === "1";
+  const requestStarted = measure ? performance.now() : 0;
+  const timings: SearchTimings & { embed?: number; llm_ttft?: number; llm_total?: number; end_to_end?: number } = {};
 
   let activeConversationId: string | undefined = conversationId;
   let createdConversation = false;
@@ -61,16 +67,22 @@ chatRouter.post("/", async (req, res) => {
       return res.end();
     }
 
-    console.log(`[chat] query="${query.substring(0, 120)}" doc=${documentId}`);
+    if (!measure) console.log(`[chat] query="${query.substring(0, 120)}" doc=${documentId}`);
 
+    const embedStarted = measure ? performance.now() : 0;
     const queryEmbedding = await generateQueryEmbedding(query.trim());
-    const chunks = await hybridSearch(query.trim(), queryEmbedding, documentId);
+    if (measure) timings.embed = performance.now() - embedStarted;
+    const chunks = await hybridSearch(query.trim(), queryEmbedding, documentId, measure ? { timings, quiet: true } : undefined);
 
     if (chunks.length === 0) {
       send({
         type: "not_found",
         message: "No relevant content found in this document for your query.",
       });
+      if (measure) {
+        timings.end_to_end = performance.now() - requestStarted;
+        send({ type: "eval_timings", timings });
+      }
       return res.end();
     }
 
@@ -98,7 +110,7 @@ chatRouter.post("/", async (req, res) => {
       )
       .join("\n\n");
 
-    console.log(`[chat] context: ${chunks.length} chunks, ~${contextText.length} chars`);
+    if (!measure) console.log(`[chat] context: ${chunks.length} chunks, ~${contextText.length} chars`);
 
     const pictures = await prisma.documentPicture.findMany({
       where: { documentId, chunkId: { in: chunks.map((chunk) => chunk.id) } },
@@ -124,6 +136,7 @@ chatRouter.post("/", async (req, res) => {
       },
     ];
 
+    const llmStarted = measure ? performance.now() : 0;
     const stream = await genai.models.generateContentStream({
       model: GENERATION_MODEL,
       contents,
@@ -131,14 +144,20 @@ chatRouter.post("/", async (req, res) => {
     });
 
     let fullResponse = "";
+    let sawFirstToken = false;
 
     for await (const chunk of stream) {
       const text = chunk.text;
       if (text) {
+        if (measure && !sawFirstToken) {
+          timings.llm_ttft = performance.now() - llmStarted;
+          sawFirstToken = true;
+        }
         fullResponse += text;
         send({ type: "delta", text });
       }
     }
+    if (measure) timings.llm_total = performance.now() - llmStarted;
 
     await prisma.message.createMany({
       data: [
@@ -166,6 +185,10 @@ chatRouter.post("/", async (req, res) => {
       .filter((c) => c.pageNumber != null);
 
     send({ type: "done", conversationId: activeConversationId, citations });
+    if (measure) {
+      timings.end_to_end = performance.now() - requestStarted;
+      send({ type: "eval_timings", timings });
+    }
     res.end();
   } catch (err) {
     const message =

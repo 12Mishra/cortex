@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     conversationId?: string;
   };
 
-  if (!query?.trim() || !documentId) {
+  if (typeof query !== "string" || !query.trim() || typeof documentId !== "string" || !documentId || (conversationId !== undefined && typeof conversationId !== "string")) {
     return NextResponse.json(
       { error: "Missing query or documentId" },
       { status: 400 },
@@ -37,6 +37,14 @@ export async function POST(req: NextRequest) {
       { error: "Document is not ready" },
       { status: 400 },
     );
+  }
+
+  if (conversationId) {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId, userId: session.user.id, documentId },
+      select: { id: true },
+    });
+    if (!conversation) return NextResponse.json({ error: "Conversation not found" }, { status: 404 });
   }
 
   const expressRes = await fetch(`${EXPRESS_API_URL}/chat`, {
