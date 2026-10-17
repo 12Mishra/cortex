@@ -42,7 +42,10 @@ function processingErrorMessage(error: string | null): string {
     return "This document needs new Jina embeddings. Retry processing to rebuild its index.";
   }
   if (/monthly spending cap/i.test(error)) {
-    return "The previous Gemini embedding request reached its monthly spending cap. Retry with Jina.";
+    return "Gemini's monthly spending cap has been reached. Answers will work again when the cap resets or is adjusted.";
+  }
+  if (/Cortex reached its monthly Gemini budget/i.test(error)) {
+    return error;
   }
   if (/prepayment credits are depleted/i.test(error)) {
     return "The embedding service has no prepaid credits left. Add credits in Google AI Studio, then retry.";

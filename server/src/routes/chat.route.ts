@@ -5,7 +5,8 @@ import { generateQueryEmbedding } from "../lib/embed";
 import { hybridSearch, type SearchTimings } from "../lib/retrieval";
 import { getFileFromS3 } from "../lib/download-file";
 import { streamToBuffer } from "../lib/buffer";
-import { GENERATION_MODEL, SYSTEM_INSTRUCTION } from "../lib/generation-config";
+import { GENERATION_MODEL, MAX_OUTPUT_TOKENS, SYSTEM_INSTRUCTION } from "../lib/generation-config";
+import { estimateGeminiCostUsd, GEMINI_MONTHLY_BUDGET_USD, reserveGeminiBudget } from "../lib/gemini-budget";
 
 export const chatRouter = express.Router();
 
@@ -137,16 +138,35 @@ chatRouter.post("/", async (req, res) => {
     ];
 
     const llmStarted = measure ? performance.now() : 0;
-    const stream = await genai.models.generateContentStream({
+    const tokenCount = await genai.models.countTokens({
       model: GENERATION_MODEL,
       contents,
       config: { systemInstruction: SYSTEM_INSTRUCTION },
     });
+    if (!Number.isInteger(tokenCount.totalTokens) || tokenCount.totalTokens! <= 0) {
+      throw new Error("Gemini did not return a token count, so Cortex could not check its monthly budget.");
+    }
+    const reserved = await reserveGeminiBudget(tokenCount.totalTokens!, MAX_OUTPUT_TOKENS);
+    if (!reserved) {
+      send({
+        type: "error",
+        message: `Cortex reached its monthly Gemini budget of $${GEMINI_MONTHLY_BUDGET_USD.toFixed(2)}. Ask the administrator to review the budget before continuing.`,
+      });
+      return res.end();
+    }
+
+    const stream = await genai.models.generateContentStream({
+      model: GENERATION_MODEL,
+      contents,
+      config: { systemInstruction: SYSTEM_INSTRUCTION, maxOutputTokens: MAX_OUTPUT_TOKENS },
+    });
 
     let fullResponse = "";
     let sawFirstToken = false;
+    let usage: { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number } | undefined;
 
     for await (const chunk of stream) {
+      if (chunk.usageMetadata) usage = chunk.usageMetadata;
       const text = chunk.text;
       if (text) {
         if (measure && !sawFirstToken) {
@@ -156,6 +176,13 @@ chatRouter.post("/", async (req, res) => {
         fullResponse += text;
         send({ type: "delta", text });
       }
+    }
+    if (usage) {
+      const actualUsd = estimateGeminiCostUsd(
+        usage.promptTokenCount ?? tokenCount.totalTokens ?? 0,
+        (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0),
+      );
+      await reserved.adjust(actualUsd);
     }
     if (measure) timings.llm_total = performance.now() - llmStarted;
 

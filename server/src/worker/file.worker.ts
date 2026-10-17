@@ -28,6 +28,7 @@ const MAX_WORKERS = Math.max(
   readPositiveInteger(process.env.FILE_WORKER_MAX, 1),
 );
 const SCALE_INTERVAL_MS = readPositiveInteger(process.env.FILE_WORKER_SCALE_INTERVAL_MS, 5_000);
+const GLOBAL_QUEUE_CONCURRENCY = readPositiveInteger(process.env.FILE_QUEUE_GLOBAL_CONCURRENCY, 1);
 
 const scalerQueue = new Queue(QUEUE_NAME, { connection: redisConnection });
 const workers: Worker[] = [];
@@ -231,14 +232,19 @@ async function scaleWorkers() {
   }
 }
 
-for (let i = 0; i < MIN_WORKERS; i++) {
-  createWorker();
-}
+let scaleTimer: ReturnType<typeof setInterval> | undefined;
 
-const scaleTimer = setInterval(() => {
-  void scaleWorkers();
-}, SCALE_INTERVAL_MS);
-void scaleWorkers();
+async function startWorkers() {
+  await scalerQueue.setGlobalConcurrency(GLOBAL_QUEUE_CONCURRENCY);
+  for (let i = 0; i < MIN_WORKERS; i++) createWorker();
+  scaleTimer = setInterval(() => void scaleWorkers(), SCALE_INTERVAL_MS);
+  await scaleWorkers();
+  console.log(`[worker] Global queue concurrency: ${GLOBAL_QUEUE_CONCURRENCY}`);
+}
+void startWorkers().catch((err) => {
+  console.error("[worker] Could not initialize global queue concurrency:", err);
+  process.exitCode = 1;
+});
 
 process.on("SIGINT", () => {
   void shutdown();
@@ -249,7 +255,7 @@ process.on("SIGTERM", () => {
 });
 
 async function shutdown() {
-  clearInterval(scaleTimer);
+  if (scaleTimer) clearInterval(scaleTimer);
   await Promise.all(workers.map((worker) => worker.close()));
   await scalerQueue.close();
   await redisConnection.quit();
